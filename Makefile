@@ -34,7 +34,7 @@ icsilog.o: icsilog.cpp icsilog.h
 	g++ ${OPTS} -c icsilog.cpp
 
 clean:
-	rm *.o shooterDAggerUndiscounted shooterDAggerUnrolled
+	rm *.o shooterDAggerUndiscounted shooterDAggerUnrolled shooterDAggerMCTSUndiscounted shooterDAggerMCTSUnrolled
 
 cleanmac:
 	rm -r *.dSYM
