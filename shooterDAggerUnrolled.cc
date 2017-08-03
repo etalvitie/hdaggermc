@@ -355,7 +355,7 @@ int main(int argc, char** argv)
    if(argc <= 6)
    {
       cout << "Usage: ./shooterDAggerUnrolled algorithm explorationType trial numBatches samplesPerBatch movingBullseye [outputFileNote]" << endl;
-      cout << "algorithm -- 0: DAgger, 1: DAgger-MC, 2: H-DAgger-MC, 3: One-ply MC with perfect model, 4: Uniform random, 5: Optimal policy" << endl;
+      cout << "algorithm -- 0: DAgger-MC, 1: H-DAgger-MC, 2: One-ply MC with perfect model, 3: Uniform random, 4: Optimal policy" << endl;
       cout << "explorationType -- 0: Uniform random, 1: Optimal policy, 2: One-ply MC with perfect model" << endl;
       cout << "trial -- the trial number (determines the random seed)" << endl;
       cout << "numBatches -- the number of batches to generate in DAgger-based algorithms" << endl;
@@ -368,12 +368,11 @@ int main(int argc, char** argv)
    int gamma = 9;
    double discountFactor = double(gamma)/10;
 
-   //0: DAgger
-   //1: DAgger-MC
-   //2: Hallucinated DAgger-MC
-   //3: Real model
-   //4: Random
-   //5: Optimal
+   //0: DAgger-MC
+   //1: Hallucinated DAgger-MC
+   //2: Real model
+   //3: Random
+   //4: Optimal
    int daggerType = atoi(argv[1]);
    
    //0: Random
@@ -405,30 +404,26 @@ int main(int argc, char** argv)
    outSS << outputNote;
    if(daggerType == 0)
    {
-      outSS << ".DAgger";
+      outSS << ".DAggerMC.unrolled";
    }
    else if(daggerType == 1)
    {
-      outSS << ".DAggerMC.unrolled";
+      outSS << ".HDAggerMC.unrolled.hDelay" << hDelay;
    }
    else if(daggerType == 2)
    {
-      outSS << ".HDAggerMC.unrolled.hDelay" << hDelay;
+      outSS << ".PerfectModel";
    }
    else if(daggerType == 3)
    {
-      outSS << ".PerfectModel";
-   }
-   else if(daggerType == 4)
-   {
       outSS << ".Random";
    }
-   else if(daggerType == 5)
+   else if(daggerType == 4)
    {
       outSS << ".Optimal";
    }   
 
-   if(daggerType < 3)
+   if(daggerType < 2)
    {
       if(explorationType == 0)
       {
@@ -464,7 +459,7 @@ int main(int argc, char** argv)
 
    unordered_map<size_t, int> policyCache;   
 
-   if(daggerType >= 3) //Not really doing DAgger. Just execute one of the benchmark policies and report the results.
+   if(daggerType >= 2) //Not really doing DAgger. Just execute one of the benchmark policies and report the results.
    {
       double totalDiscountedReward = 0;
       int numEpisodes = 1;
@@ -483,7 +478,7 @@ int main(int argc, char** argv)
 	 for(int t = 0; t < 30; t++)
 	 {
 	    int action;
-	    if(daggerType == 3) //One-ply MC with perfect model
+	    if(daggerType == 2) //One-ply MC with perfect model
 	    {
 	       size_t hash = hash_range(obs.begin(), obs.end());
 	       action = policyCache[hash];
@@ -497,7 +492,7 @@ int main(int argc, char** argv)
 		  action--;
 	       }
 	    }
-	    else if(daggerType == 4) //Uniform random policy
+	    else if(daggerType == 3) //Uniform random policy
 	    {
 	       action = rand()%numActions;
 	    }
@@ -571,7 +566,7 @@ int main(int argc, char** argv)
       }
    }
    
-   if(daggerType < 2) //If not hallucinating, then update everything
+   if(daggerType == 0) //If not hallucinating, then update everything
    {
       for(int m = 0; m < 15; m++)
       {
@@ -643,13 +638,12 @@ int main(int argc, char** argv)
 	       term = term%10;
 	       int a = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
 	       world->takeAction(a, obsContext[0], reward, endEpisode);
-	       if(daggerType > 0)
+
+	       for(int m = 0; m < 15; m++)
 	       {
-		  for(int m = 0; m < 15; m++)
-		  {
-		     model[m]->update(a, obsContext[0], 0, false, false);
-		  }
+		  model[m]->update(a, obsContext[0], 0, false, false);
 	       }
+
 	       actContext[0] = a;
 	       t++;
 	    }
@@ -657,7 +651,7 @@ int main(int argc, char** argv)
 	    //Flip another coin to determine what to do in the last step
 	    int coin = rand();
 	    coin = coin%2;
-	    if(daggerType == 0 || coin) //If doing regular DAgger, or if coin comes up heads: just use the exploration policy
+	    if(coin) //If coin comes up heads: just use the exploration policy
 	    {
 	       nextAct = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
 	    }
@@ -724,13 +718,13 @@ int main(int argc, char** argv)
 	 vector<vector<int> > hObsContext;
 	 bool hReward;	 
 	 bool hEnd;
-	 if(daggerType == 2) //The hallucinated context starts out the same as the regular context
+	 if(daggerType == 1) //The hallucinated context starts out the same as the regular context
 	 {
 	    hObsContext = obsContext;
 	 }
 	 for(int m = 0; m < 15; m++)
 	 {
-	    if(daggerType < 2) //If not hallucinating, just use the regular context to create the data point
+	    if(daggerType == 0) //If not hallucinating, just use the regular context to create the data point
 	    {
 	       dataset[m].push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
 	    }
@@ -739,7 +733,7 @@ int main(int argc, char** argv)
 	       dataset[m].push_back(make_tuple(hObsContext, actContext, nextAct, nextObs, 0, false));
 	    }
 
-	    if(daggerType == 2 && b >= (m+1)*hDelay) //If hallucinating and if seen enough batches for this depth, roll the model forward (sample and update)
+	    if(daggerType == 1 && b >= (m+1)*hDelay) //If hallucinating and if seen enough batches for this depth, roll the model forward (sample and update)
 	    {
 	       model[m]->sample(nextAct, hObsContext[0], hReward, hEnd);
 	       if(m < 14)

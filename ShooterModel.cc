@@ -100,7 +100,8 @@ void ShooterModel::takeAction(int act, vector<int>& obs, int& reward, bool& endE
    //Get rid of all the destroyed bullets
    for(unsigned i = 0; i < toErase.size(); i++)
    {
-      bullets.erase(bullets.begin()+toErase[i]);
+      bullets[toErase[i]] = bullets.back();
+      bullets.pop_back();
    }
 
    //Now move the ship according to the action

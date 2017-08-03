@@ -1,7 +1,13 @@
 OPTS = -Wall -g -O3 -Wno-deprecated
 LIB = -lboost_system
 
-all: shooterDAggerUnrolled shooterDAggerUndiscounted
+all: shooterDAggerUnrolled shooterDAggerUndiscounted shooterDAggerMCTSUnrolled shooterDAggerMCTSUndiscounted
+
+shooterDAggerMCTSUndiscounted: shooterDAggerMCTSUndiscounted.cc ShooterModel.o SamplingModel.h ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o icsilogw.hpp jacoblog.hpp
+	g++ ${OPTS} -o shooterDAggerMCTSUndiscounted shooterDAggerMCTSUndiscounted.cc ShooterModel.o ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o ${LIB}
+
+shooterDAggerMCTSUnrolled: shooterDAggerMCTSUnrolled.cc ShooterModel.o SamplingModel.h ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o icsilogw.hpp jacoblog.hpp
+	g++ ${OPTS} -o shooterDAggerMCTSUnrolled shooterDAggerMCTSUnrolled.cc ShooterModel.o ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o ${LIB}
 
 shooterDAggerUndiscounted: shooterDAggerUndiscounted.cc ShooterModel.o SamplingModel.h ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o icsilogw.hpp jacoblog.hpp
 	g++ ${OPTS} -o shooterDAggerUndiscounted shooterDAggerUndiscounted.cc ShooterModel.o ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o ${LIB}
