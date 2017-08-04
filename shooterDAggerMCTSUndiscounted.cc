@@ -740,7 +740,6 @@ int main(int argc, char** argv)
 		  obsContext[0] = nextObs;
 		  actContext[0] = nextAct;	       
 		  nextAct = rolloutActions[h+1];
-		  cout << h << " " << nextAct << endl;
 		  world->takeAction(nextAct, nextObs, reward, endEpisode);
 	       }
 	    }
