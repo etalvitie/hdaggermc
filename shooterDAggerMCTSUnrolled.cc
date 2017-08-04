@@ -98,7 +98,7 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
       {      
 	 vector<int> maxActs;
 	 double maxScore = -numeric_limits<double>::infinity();
-	 for(unsigned a = 0; a < numActions; a++)
+	 for(int a = 0; a < numActions; a++)
 	 {
 	    double score = tree[curNodeIndex].summedReturns[a]/tree[curNodeIndex].counts[a] + 4*sqrt(log(tree[curNodeIndex].totalCount)/tree[curNodeIndex].counts[a]);
 	    if(score-maxScore > 1e-6)
@@ -177,7 +177,7 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	 //Now curNode has at least one untried action
 	 //Pick one at random so we can generate a new leaf
 	 vector<int> untried;
-	 for(unsigned a = 0; a < numActions; a++)
+	 for(int a = 0; a < numActions; a++)
 	 {
 	    if(tree[curNodeIndex].counts[a] == 0)
 	    {
@@ -356,7 +356,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
       {      
 	 vector<int> maxActs;
 	 double maxScore = -numeric_limits<double>::infinity();
-	 for(unsigned a = 0; a < numActions; a++)
+	 for(int a = 0; a < numActions; a++)
 	 {
 	    double score = tree[curNodeIndex].summedReturns[a]/tree[curNodeIndex].counts[a] + 4*sqrt(log(tree[curNodeIndex].totalCount)/tree[curNodeIndex].counts[a]);
 	    if(score-maxScore > 1e-6)
@@ -410,7 +410,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 //Now curNode has at least one untried action
 	 //Pick one at random so we can generate a new leaf
 	 vector<int> untried;
-	 for(unsigned a = 0; a < numActions; a++)
+	 for(int a = 0; a < numActions; a++)
 	 {
 	    if(tree[curNodeIndex].counts[a] == 0)
 	    {
