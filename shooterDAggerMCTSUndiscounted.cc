@@ -171,6 +171,16 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 int reward = rewardFunction(obs, action);
 	 rewards.push_back(reward);
 	 actions.push_back(action);
+	
+	 if(t == 0 && action == firstAction)
+	 {
+	    numActionRollouts++;
+	    int r = rand()%numActionRollouts;
+	    if(r == 0)
+	    {
+	       saveRollout = true;
+	    }
+	 }
 
 	 if(saveRollout)
 	 {
@@ -730,6 +740,7 @@ int main(int argc, char** argv)
 		  obsContext[0] = nextObs;
 		  actContext[0] = nextAct;	       
 		  nextAct = rolloutActions[h+1];
+		  cout << h << " " << nextAct << endl;
 		  world->takeAction(nextAct, nextObs, reward, endEpisode);
 	       }
 	    }

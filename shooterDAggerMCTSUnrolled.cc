@@ -190,6 +190,16 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	 rewards.push_back(reward);
 	 actions.push_back(action);
 
+	 if(t == 0 && action == firstAction)
+	 {
+	    numActionRollouts++;
+	    int r = rand()%numActionRollouts;
+	    if(r == 0)
+	    {
+	       saveRollout = true;
+	    }
+	 }
+
 	 if(saveRollout)
 	 {
 	    rolloutActions[t] = action;
