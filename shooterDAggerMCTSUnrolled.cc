@@ -51,9 +51,7 @@ struct MCTSNode
    vector<double> summedReturns;
    vector<int> counts;
    int totalCount;
-   vector<unordered_map<size_t, int> > children;
-   int parent;
-   MCTSNode(int numActions, int parentIndex){summedReturns.resize(numActions, 0); counts.resize(numActions, 0); children.resize(numActions); totalCount=0; parent=parentIndex;}
+   MCTSNode(int numActions){summedReturns.resize(numActions, 0); counts.resize(numActions, 0); totalCount=0;}
 };
 
 /* Takes an unrolled model, discount factor, current observation
@@ -74,8 +72,11 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
    }
 
    int numActions = model[0]->getNumActs();
-
-   vector<MCTSNode> tree(1, MCTSNode(numActions, -1));
+   vector<MCTSNode*> nodes;
+   vector<unordered_map<size_t, MCTSNode*> > tree(rolloutDepth);
+   nodes.push_back(new MCTSNode(numActions));
+   size_t rootHash = hash_range(curObs.begin(), curObs.end());
+   tree[0][rootHash] = nodes[0];
    int numActionRollouts = 0;   
    for(int rollout = 0; rollout < numRollouts; rollout++)
    {
@@ -90,17 +91,18 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
       vector<int> obs = curObs;
       vector<int> rewards;
       vector<int> actions;
-      int curNodeIndex = 0;
+      vector<MCTSNode*> rolloutNodes;
+      MCTSNode* curNode = nodes[0];
       double rolloutReturn = 0;      
       bool saveRollout = false;	       
       //Move down the tree until a node is missing a child
-      while(t < rolloutDepth && tree[curNodeIndex].totalCount >= numActions)
+      while(t < rolloutDepth && curNode->totalCount >= numActions)
       {      
 	 vector<int> maxActs;
 	 double maxScore = -numeric_limits<double>::infinity();
 	 for(int a = 0; a < numActions; a++)
 	 {
-	    double score = tree[curNodeIndex].summedReturns[a]/tree[curNodeIndex].counts[a] + 4*sqrt(log(tree[curNodeIndex].totalCount)/tree[curNodeIndex].counts[a]);
+	    double score = curNode->summedReturns[a]/curNode->counts[a] + 4*sqrt(log(curNode->totalCount)/curNode->counts[a]);
 	    if(score-maxScore > 1e-6)
 	    {
 	       maxActs.clear();
@@ -114,6 +116,7 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	 }
 	 int action = maxActs[rand()%maxActs.size()];
 	 int reward = rewardFunction(obs, action);
+	 rolloutNodes.push_back(curNode);
 	 rewards.push_back(reward);
 	 actions.push_back(action);
 
@@ -141,21 +144,23 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	 {
 	    m++;
 	 }
+
+	 t++;
+	    
 	 if(t < rolloutDepth-1)
 	 {
 	    model[m]->update(action, obs, dummyReward, endEpisode, false);
+
+	    size_t obsHash = hash_range(obs.begin(), obs.end());
+	    curNode = tree[t][obsHash];
+	    if(curNode == 0) //first time seeing this observation, need a new node
+	    {
+	       nodes.push_back(new MCTSNode(numActions));
+	       tree[t][obsHash] = nodes.back();
+	       curNode = nodes.back();
+	    }
 	 }
 
-	 size_t obsHash = hash_range(obs.begin(), obs.end());
-	 int childIndex = tree[curNodeIndex].children[action][obsHash];
-	 if(childIndex == 0) //first time seeing this observation, need a new node
-	 {
-	    tree.push_back(MCTSNode(numActions, curNodeIndex));
-	    childIndex = tree.size()-1;
-	    tree[curNodeIndex].children[action][obsHash] = childIndex;
-	 }
-
-	 curNodeIndex = childIndex;
 	 if(printRollouts)
 	 {
 	    cout << "In tree A: " << action << endl;
@@ -168,8 +173,7 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	       cout << endl;
 	    }
 	    cout << "R: " << reward << endl;
-	 }
-	 t++;
+	 }	 
       }
 
       if(t < rolloutDepth) //Otherwise the tree is as deep as it can be
@@ -179,7 +183,7 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	 vector<int> untried;
 	 for(int a = 0; a < numActions; a++)
 	 {
-	    if(tree[curNodeIndex].counts[a] == 0)
+	    if(curNode->counts[a] == 0)
 	    {
 	       untried.push_back(a);
 	    }
@@ -187,6 +191,7 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	 
 	 int action = untried[rand()%untried.size()];
 	 int reward = rewardFunction(obs, action);
+	 rolloutNodes.push_back(curNode);
 	 rewards.push_back(reward);
 	 actions.push_back(action);
 
@@ -214,14 +219,18 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	 {
 	    m++;
 	 }
-	 if(t < rolloutDepth-1)
+
+	 t++;
+
+	 if(t < rolloutDepth)
 	 {
 	    model[m]->update(action, obs, dummyReward, endEpisode, false);
-	 }
 
-	 size_t obsHash = hash_range(obs.begin(), obs.end());
-	 tree.push_back(MCTSNode(numActions, curNodeIndex));
-	 tree[curNodeIndex].children[action][obsHash] = tree.size()-1;
+	    size_t obsHash = hash_range(obs.begin(), obs.end());
+	    nodes.push_back(new MCTSNode(numActions));
+	    tree[t][obsHash] = nodes.back();
+	    curNode = nodes.back();
+	 }
 
 	 if(printRollouts)
 	 {
@@ -236,8 +245,6 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	    }
 	    cout << "R: " << reward << endl;
 	 }	 
-
-	 t++;
 	 
 	 //Now perform a rollout
 	 double discount = 1;
@@ -287,19 +294,14 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
       }
 
       //Now we back up the return
-      int rewardIndex = rewards.size()-1;
-      while(curNodeIndex != -1)
+      for(int rewardIndex = rewards.size()-1; rewardIndex >= 0; rewardIndex--)
       {
 	 rolloutReturn = rewards[rewardIndex] + discountFactor*rolloutReturn;
 	 int action = actions[rewardIndex];
 
-	 tree[curNodeIndex].totalCount += 1;
-	 tree[curNodeIndex].counts[action] += 1;
-	 tree[curNodeIndex].summedReturns[action] += rolloutReturn;
-
-	 curNodeIndex = tree[curNodeIndex].parent;
-
-	 rewardIndex--;	 
+	 rolloutNodes[rewardIndex]->totalCount += 1;
+	 rolloutNodes[rewardIndex]->counts[action] += 1;
+	 rolloutNodes[rewardIndex]->summedReturns[action] += rolloutReturn;
       }
 
       if(printRollouts)
@@ -314,7 +316,7 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
    }
 
    //Break ties randomly
-   MCTSNode* root = &(tree[0]);
+   MCTSNode* root = nodes[0];
    double maxVal = -numeric_limits<double>::infinity();
    vector<int> maxActs;
    for(int a = 0; a < numActions; a++)
@@ -332,6 +334,11 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
       }
    }
 
+   for(unsigned i = 0; i < nodes.size(); i++)
+   {
+      delete nodes[i];
+   }
+   
    return maxActs[rand()%maxActs.size()];
 }
 
@@ -339,12 +346,17 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
    and uses one-ply Monte Carlo to choose an action.
    Optional parameters:
    printRollouts - if true, prints things for debugging.*/
-int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& curObs, bool printRollouts=false)
+int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& curObs, bool printRollouts=false, int firstAction=-1, int* rolloutActions=0, int* rolloutRewards=0, vector<int>* rolloutObs=0)
 {
    int numRollouts = 200;
    int rolloutDepth = 15; //Hardcoding these for now. Probably ought to be parameters...
    int numActions = model->getNumActs();
-   vector<MCTSNode> tree(1, MCTSNode(numActions, -1));
+   vector<MCTSNode*> nodes;
+   vector<unordered_map<size_t, MCTSNode*> > tree(rolloutDepth);
+   nodes.push_back(new MCTSNode(numActions));
+   size_t rootHash = hash_range(curObs.begin(), curObs.end());
+   tree[0][rootHash] = nodes[0];
+   int numActionRollouts = 0;      
    for(int rollout = 0; rollout < numRollouts; rollout++)
    {
       if(printRollouts)
@@ -358,17 +370,18 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
       vector<int> obs = curObs;
       vector<int> rewards;
       vector<int> actions;
-      int curNodeIndex = 0;
+      vector<MCTSNode*> rolloutNodes;
+      MCTSNode* curNode = nodes[0];
       double rolloutReturn = 0;   
-
+      bool saveRollout = false;	       
       //Move down the tree until a node is missing a child
-      while(t < rolloutDepth && tree[curNodeIndex].totalCount >= numActions)
+      while(t < rolloutDepth && curNode->totalCount >= numActions)
       {      
 	 vector<int> maxActs;
 	 double maxScore = -numeric_limits<double>::infinity();
 	 for(int a = 0; a < numActions; a++)
 	 {
-	    double score = tree[curNodeIndex].summedReturns[a]/tree[curNodeIndex].counts[a] + 4*sqrt(log(tree[curNodeIndex].totalCount)/tree[curNodeIndex].counts[a]);
+	    double score = curNode->summedReturns[a]/curNode->counts[a] + 12*sqrt(log(curNode->totalCount)/curNode->counts[a]);
 	    if(score-maxScore > 1e-6)
 	    {
 	       maxActs.clear();
@@ -382,23 +395,31 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 }
 	 int action = maxActs[rand()%maxActs.size()];
 	 int reward = rewardFunction(obs, action);
+	 rolloutNodes.push_back(curNode);
 	 rewards.push_back(reward);
 	 actions.push_back(action);
 
+	 if(t == 0 && action == firstAction)
+	 {
+	    numActionRollouts++;
+	    int r = rand()%numActionRollouts;
+	    if(r == 0)
+	    {
+	       saveRollout = true;
+	    }
+	 }
+
+	 if(saveRollout)
+	 {
+	    rolloutActions[t] = action;
+	    rolloutRewards[t] = reward;
+	    rolloutObs[t] = obs;
+	 }
+	 
 	 bool endEpisode;
 	 int dummyReward;
 	 model->takeAction(action, obs, dummyReward, endEpisode);
 
-	 size_t obsHash = hash_range(obs.begin(), obs.end());
-	 int childIndex = tree[curNodeIndex].children[action][obsHash];
-	 if(childIndex == 0) //first time seeing this observation, need a new node
-	 {
-	    tree.push_back(MCTSNode(numActions, curNodeIndex));
-	    childIndex = tree.size()-1;
-	    tree[curNodeIndex].children[action][obsHash] = childIndex;
-	 }
-
-	 curNodeIndex = childIndex;
 	 if(printRollouts)
 	 {
 	    cout << t << ": in tree A: " << action << endl;
@@ -412,7 +433,20 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	    }
 	    cout << "R: " << reward << endl;
 	 }
+
 	 t++;
+
+	 if(t < rolloutDepth)
+	 {
+	    size_t obsHash = hash_range(obs.begin(), obs.end());
+	    curNode = tree[t][obsHash];
+	    if(curNode == 0) //first time seeing this observation, need a new node
+	    {
+	       nodes.push_back(new MCTSNode(numActions));
+	       tree[t][obsHash] = nodes.back();
+	       curNode = nodes.back();
+	    }
+	 }
       }
 
       if(t < rolloutDepth) //Otherwise the tree is as deep as it can be
@@ -422,7 +456,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 vector<int> untried;
 	 for(int a = 0; a < numActions; a++)
 	 {
-	    if(tree[curNodeIndex].counts[a] == 0)
+	    if(curNode->counts[a] == 0)
 	    {
 	       untried.push_back(a);
 	    }
@@ -430,16 +464,30 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 
 	 int action = untried[rand()%untried.size()];
 	 int reward = rewardFunction(obs, action);
+	 rolloutNodes.push_back(curNode);
 	 rewards.push_back(reward);
 	 actions.push_back(action);
+	
+	 if(t == 0 && action == firstAction)
+	 {
+	    numActionRollouts++;
+	    int r = rand()%numActionRollouts;
+	    if(r == 0)
+	    {
+	       saveRollout = true;
+	    }
+	 }
+
+	 if(saveRollout)
+	 {
+	    rolloutActions[t] = action;
+	    rolloutRewards[t] = reward;
+	    rolloutObs[t] = obs;
+	 }
 
 	 bool endEpisode;
 	 int dummyReward;
 	 model->takeAction(action, obs, dummyReward, endEpisode);
-
-	 size_t obsHash = hash_range(obs.begin(), obs.end());
-	 tree.push_back(MCTSNode(numActions, curNodeIndex));
-	 tree[curNodeIndex].children[action][obsHash] = tree.size()-1;
 
 	 if(printRollouts)
 	 {
@@ -456,6 +504,14 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 }	 
 
 	 t++;
+
+	 if(t < rolloutDepth)
+	 {
+	    size_t obsHash = hash_range(obs.begin(), obs.end());
+	    nodes.push_back(new MCTSNode(numActions));
+	    tree[t][obsHash] = nodes.back();
+	    curNode = nodes.back();
+	 }
 	 
 	 //Now perform a rollout
 	 double discount = 1;
@@ -463,6 +519,13 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 {
 	    int action = rand()%numActions;
 	    int reward = rewardFunction(obs, action);
+	    
+	    if(saveRollout)
+	    {
+	       rolloutActions[t] = action;
+	       rolloutRewards[t] = reward;
+	       rolloutObs[t] = obs;
+	    }
 	    
 	    bool endEpisode;
 	    int dummyReward;
@@ -490,19 +553,14 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
       }
 
       //Now we back up the return
-      int rewardIndex = rewards.size()-1;
-      while(curNodeIndex != -1)
+      for(int rewardIndex = rewards.size()-1; rewardIndex >= 0; rewardIndex--)
       {
 	 rolloutReturn = rewards[rewardIndex] + discountFactor*rolloutReturn;
 	 int action = actions[rewardIndex];
 
-	 tree[curNodeIndex].totalCount += 1;
-	 tree[curNodeIndex].counts[action] += 1;
-	 tree[curNodeIndex].summedReturns[action] += rolloutReturn;
-
-	 curNodeIndex = tree[curNodeIndex].parent;
-
-	 rewardIndex--;
+	 rolloutNodes[rewardIndex]->totalCount += 1;
+	 rolloutNodes[rewardIndex]->counts[action] += 1;
+	 rolloutNodes[rewardIndex]->summedReturns[action] += rolloutReturn;
       }
 
       if(printRollouts)
@@ -514,7 +572,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
    }
 
    //Break ties randomly
-   MCTSNode* root = &(tree[0]);
+   MCTSNode* root = nodes[0];
    double maxVal = -numeric_limits<double>::infinity();
    vector<int> maxActs;
    for(int a = 0; a < numActions; a++)
@@ -533,6 +591,11 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
       }
    }
 
+   for(unsigned i = 0; i < nodes.size(); i++)
+   {
+      delete nodes[i];
+   }
+   
    return maxActs[rand()%maxActs.size()];
 }
 
