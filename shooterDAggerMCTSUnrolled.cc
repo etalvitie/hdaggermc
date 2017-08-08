@@ -102,7 +102,7 @@ int mcts(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, co
 	 double maxScore = -numeric_limits<double>::infinity();
 	 for(int a = 0; a < numActions; a++)
 	 {
-	    double score = curNode->summedReturns[a]/curNode->counts[a] + 4*sqrt(log(curNode->totalCount)/curNode->counts[a]);
+	    double score = curNode->summedReturns[a]/curNode->counts[a] + 12*sqrt(log(curNode->totalCount)/curNode->counts[a]);
 	    if(score-maxScore > 1e-6)
 	    {
 	       maxActs.clear();
