@@ -51,7 +51,8 @@ struct MCTSNode
    vector<double> summedReturns;
    vector<int> counts;
    int totalCount;
-   vector<unordered_map<size_t, int> > children;
+//   vector<unordered_map<size_t, int> > children;
+   vector<int> children;
    int parent;
    MCTSNode(int numActions, int parentIndex){summedReturns.resize(numActions, 0); counts.resize(numActions, 0); children.resize(numActions); totalCount=0; parent=parentIndex;}
 };
@@ -90,7 +91,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 double maxScore = -numeric_limits<double>::infinity();
 	 for(int a = 0; a < numActions; a++)
 	 {
-	    double score = tree[curNodeIndex].summedReturns[a]/tree[curNodeIndex].counts[a] + 4*sqrt(log(tree[curNodeIndex].totalCount)/tree[curNodeIndex].counts[a]);
+	    double score = tree[curNodeIndex].summedReturns[a]/tree[curNodeIndex].counts[a] + 12*sqrt(log(tree[curNodeIndex].totalCount)/tree[curNodeIndex].counts[a]);
 	    if(score-maxScore > 1e-6)
 	    {
 	       maxActs.clear();
@@ -128,13 +129,12 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 int dummyReward;
 	 model->takeAction(action, obs, dummyReward, endEpisode);
 
-	 size_t obsHash = hash_range(obs.begin(), obs.end());
-	 int childIndex = tree[curNodeIndex].children[action][obsHash];
-	 if(childIndex == 0) //first time seeing this observation, need a new node
+	 int childIndex = tree[curNodeIndex].children[action];
+	 if(childIndex == 0) //first time seeing this action
 	 {
 	    tree.push_back(MCTSNode(numActions, curNodeIndex));
 	    childIndex = tree.size()-1;
-	    tree[curNodeIndex].children[action][obsHash] = childIndex;
+	    tree[curNodeIndex].children[action] = childIndex;
 	 }
 
 	 curNodeIndex = childIndex;
@@ -193,9 +193,8 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 int dummyReward;
 	 model->takeAction(action, obs, dummyReward, endEpisode);
 
-	 size_t obsHash = hash_range(obs.begin(), obs.end());
 	 tree.push_back(MCTSNode(numActions, curNodeIndex));
-	 tree[curNodeIndex].children[action][obsHash] = tree.size()-1;
+	 tree[curNodeIndex].children[action] = tree.size()-1;
 
 	 if(printRollouts)
 	 {
