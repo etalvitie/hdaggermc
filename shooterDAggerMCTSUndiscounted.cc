@@ -5,6 +5,8 @@ Date: 2016
 
 #include "ConvolutionalBinaryCTS.h"
 #include "ShooterModel.h"
+#include "PatchRewardModel.h"
+#include "ShooterRewardModel.h"
 
 #include <vector>
 #include <iostream>
@@ -16,34 +18,6 @@ Date: 2016
 
 using namespace std;
 using namespace boost;
-
-/* Takes the most recent observation and action and
-   gives the resulting reward.*/
-int rewardFunction(const vector<int>& obs, int act)
-{
-   int r = 0;
-   if(act == 3)
-   {
-      r -= 1;
-   }
-
-   for(int target = 0; target < 3; target++)
-   {
-      int bottomLeft = 4*15 + target*5 + 1;
-      if(obs[bottomLeft] && !obs[bottomLeft + 1] && obs[bottomLeft + 2] && 
-	 !obs[bottomLeft - 15] && obs[bottomLeft - 14] && !obs[bottomLeft - 13])// &&
-      {
-	 r += 10;
-      }
-
-      if(!obs[bottomLeft] && obs[bottomLeft + 1] && !obs[bottomLeft + 2] && 
-	 obs[bottomLeft - 15] && !obs[bottomLeft - 14] && obs[bottomLeft - 13])// &&
-      {
-	 r += 20;
-      }
-   }
-   return r;
-}
 
 //Useful struct for MCTS planning
 struct MCTSNode
@@ -61,10 +35,9 @@ struct MCTSNode
    and uses one-ply Monte Carlo to choose an action.
    Optional parameters:
    printRollouts - if true, prints things for debugging.*/
-int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& curObs, bool printRollouts=false, int firstAction=-1, int* rolloutActions=0, int* rolloutRewards=0, vector<int>* rolloutObs=0)
+int mcts(SamplingModel<int>* model, RewardModel* rewardModel, double discountFactor, int rolloutDepth, const vector<int>& curObs, bool printRollouts=false, int firstAction=-1, int* rolloutActions=0, float* rolloutRewards=0, vector<int>* rolloutObs=0)
 {
    int numRollouts = 200;
-   int rolloutDepth = 15; //Hardcoding these for now. Probably ought to be parameters...
    int numActions = model->getNumActs();
    vector<MCTSNode> tree(1, MCTSNode(numActions, -1));
    int numActionRollouts = 0;      
@@ -79,7 +52,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
       int t = 0;
 
       vector<int> obs = curObs;
-      vector<int> rewards;
+      vector<float> rewards;
       vector<int> actions;
       int curNodeIndex = 0;
       double rolloutReturn = 0;   
@@ -104,7 +77,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	    }	 
 	 }
 	 int action = maxActs[rand()%maxActs.size()];
-	 int reward = rewardFunction(obs, action);
+	 float reward = rewardModel->getReward(action, obs);
 	 rewards.push_back(reward);
 	 actions.push_back(action);
 
@@ -168,7 +141,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 }
 	 
 	 int action = untried[rand()%untried.size()];
-	 int reward = rewardFunction(obs, action);
+	 float reward = rewardModel->getReward(action, obs);
 	 rewards.push_back(reward);
 	 actions.push_back(action);
 	
@@ -217,7 +190,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
 	 while(t < rolloutDepth)
 	 {
 	    int action = rand()%numActions;
-	    int reward = rewardFunction(obs, action);
+	    float reward = rewardModel->getReward(action, obs);
 	    
 	    if(saveRollout)
 	    {
@@ -309,7 +282,7 @@ int mcts(SamplingModel<int>* model, double discountFactor, const vector<int>& cu
   each time a state is visited. The cache ensures that
   each state is assigned a single action.
   printRollouts - See onePlyMC*/
-double evaluate(ConvolutionalBinaryCTS* model, ShooterModel* world, double discountFactor, unordered_map<size_t, int>& policyCache, bool printRollouts=false)
+double evaluate(ConvolutionalBinaryCTS* model, RewardModel* rewardModel, ShooterModel* world, ShooterRewardModel* worldReward, double discountFactor, int rolloutDepth, unordered_map<size_t, int>& policyCache, bool printRollouts=false)
 {
    double totalDiscountedReward = 0;
    int numEpisodes = 1;
@@ -337,7 +310,7 @@ double evaluate(ConvolutionalBinaryCTS* model, ShooterModel* world, double disco
 	 int action = policyCache[hash];
 	 if(!action)
 	 {
-	    action = mcts(model, discountFactor, obs, printRollouts);
+	    action = mcts(model, rewardModel, discountFactor, rolloutDepth, obs, printRollouts);
 	    policyCache[hash] = action + 1;
 	 }
 	 else
@@ -345,7 +318,7 @@ double evaluate(ConvolutionalBinaryCTS* model, ShooterModel* world, double disco
 	    action--;
 	 }
 
-	 int r = rewardFunction(obs, action);
+	 float r = worldReward->getReward(action, obs);
 	 world->takeAction(action, obs, reward, endEpisode);
 	 totalDiscountedReward += discount*r;
 	 discount *= discountFactor;
@@ -360,7 +333,7 @@ double evaluate(ConvolutionalBinaryCTS* model, ShooterModel* world, double disco
   Type 0: Uniform random
   Type 1: Optimal policy
   Type 2: MCTS with a perfect model*/
-int explorationPolicy(ShooterModel* world, vector<int>& curObs, int t, double discountFactor, int numActions, int type)
+int explorationPolicy(ShooterModel* world, ShooterRewardModel* worldReward, vector<int>& curObs, int t, double discountFactor, int rolloutDepth, int numActions, int type)
 {
    int a = 0;
    if(type == 0) //Uniform random policy
@@ -369,7 +342,7 @@ int explorationPolicy(ShooterModel* world, vector<int>& curObs, int t, double di
    }
    else if(type == 2) //One-ply MC with a perfect model
    {
-      a = mcts(world, discountFactor, curObs);
+      a = mcts(world, worldReward, discountFactor, rolloutDepth, curObs);
    }
    else if(type == 1) //Optimal policy
    {
@@ -387,9 +360,10 @@ int main(int argc, char** argv)
 {
    if(argc <= 6)
    {
-      cout << "Usage: ./shooterDAggerUnrolled algorithm explorationType trial numBatches samplesPerBatch movingBullseye maxHDepth [outputFileNote]" << endl;
+      cout << "Usage: ./shooterDAggerUnrolled algorithm explorationType rewardType trial numBatches samplesPerBatch movingBullseye maxHDepth [outputFileNote]" << endl;
       cout << "algorithm -- 0: DAgger, 1: H-DAgger-MCTS, 2: MCTS with perfect model, 3: Uniform random, 4: Optimal policy" << endl;
       cout << "explorationType -- 0: Uniform random, 1: Optimal policy, 2: MCTS with perfect model" << endl;
+      cout << "rewardType -- 0: Perfect reward, 1: Learned reward" << endl;
       cout << "trial -- the trial number (determines the random seed)" << endl;
       cout << "numBatches -- the number of batches to generate in DAgger-based algorithms" << endl;
       cout << "samplesPerBatch -- the number of samples to generate in each batch" << endl;
@@ -412,14 +386,17 @@ int main(int argc, char** argv)
    //1: Optimal
    //2: One-ply MC
    int explorationType = atoi(argv[2]);
-   int trial = atoi(argv[3]);
-   int numBatches = atoi(argv[4]);
-   int samplesPerBatch = atoi(argv[5]);
+   //0: Perfect
+   //1: Learned
+   int rewardType = atoi(argv[3]);
+   int trial = atoi(argv[4]);
+   int numBatches = atoi(argv[5]);
+   int samplesPerBatch = atoi(argv[6]);
    int neighborhoodWidth = 7;
    int neighborhoodHeight = 7;
-   bool movingSweetSpot = atoi(argv[6]);
+   bool movingSweetSpot = atoi(argv[7]);
    int hDelay = 10;
-   int maxH = atoi(argv[7]);
+   int maxH = atoi(argv[8]);
 
    int outputNoteIndex = 8;
    string outputNote;
@@ -471,6 +448,12 @@ int main(int argc, char** argv)
       {
 	 outSS << ".mctsExplore";
       }
+
+      if(rewardType == 1)
+      {
+	 outSS << ".learnedReward";
+      }
+      
       outSS << ".nbhd" << neighborhoodWidth << "x" << neighborhoodHeight << ".spb" << samplesPerBatch << ".numBatches" << numBatches;
    }
 
@@ -484,7 +467,20 @@ int main(int argc, char** argv)
    int numTargets = 3;
    int numActions = 4;
    ShooterModel* world = new ShooterModel(numTargets, height, movingSweetSpot);
+   ShooterRewardModel* worldReward = new ShooterRewardModel();
+
+   int rolloutDepth = 15;
+   
    ConvolutionalBinaryCTS* model = new ConvolutionalBinaryCTS(height, numTargets*5, neighborhoodHeight, neighborhoodWidth, numActions, 1, trial + 1);
+   RewardModel* rewardModel;
+   if(rewardType == 1)
+   {
+      rewardModel = new PatchRewardModel(numActions, numTargets*5, height, 3, 3, 0.5);
+   }
+   else
+   {
+      rewardModel = new ShooterRewardModel();
+   }
 
    unordered_map<size_t, int> policyCache;   
 
@@ -513,7 +509,7 @@ int main(int argc, char** argv)
 	       action = policyCache[hash];
 	       if(!action)
 	       {
-		  action = mcts(world, discountFactor, obs);
+		  action = mcts(world, worldReward, discountFactor, rolloutDepth, obs);
 		  policyCache[hash] = action + 1;
 	       }
 	       else
@@ -533,7 +529,7 @@ int main(int argc, char** argv)
 		  action = 3;
 	       }
 	    }
-	    int r = rewardFunction(obs, action);
+	    int r = worldReward->getReward(action, obs); 
 	    int dummyR;
 	    bool endEpisode;
 	    world->takeAction(action, obs, dummyR, endEpisode);
@@ -551,6 +547,8 @@ int main(int argc, char** argv)
 
    vector<tuple<vector<vector<int> >, vector<int>, int, vector<int>, int, bool> > dataset; //obs context, action context, nextAct, nextObs, reward, endEpisode
 
+   vector<tuple<vector<int>, int, float> > rDataset; //obs, action, reward
+   
    //First batch uses only exploration policy
    cout << "Generating Samples";
    cout.flush();
@@ -578,31 +576,33 @@ int main(int argc, char** argv)
       int t = 0;
       while(rand()%10 < gamma)
       {
-	 int a = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
+	 int a = explorationPolicy(world, worldReward, obsContext[0], t, discountFactor, rolloutDepth, numActions, explorationType);
 	 world->takeAction(a, obsContext[0], reward, endEpisode);
 	 actContext[0] = a;
 	 t++;
       }
 
-      int a = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
+      int a = explorationPolicy(world, worldReward, obsContext[0], t, discountFactor, rolloutDepth, numActions, explorationType);
       world->takeAction(a, nextObs, reward, endEpisode);
       nextAct = a;
 
       dataset.push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
+      rDataset.push_back(make_tuple(obsContext[0], actContext[0], reward));
    }
 
    //Update the model
    model->batchUpdate(dataset);
+   rewardModel->batchUpdate(rDataset);
 
    //Evaluate the first policy
    policyCache.clear();
-   double averageDiscountedReward = evaluate(model, world, discountFactor, policyCache);//, true);
+   double averageDiscountedReward = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutDepth, policyCache);//, true);
    cout << "Batch 0 Average Discounted Reward: " << averageDiscountedReward << endl;
    fout << averageDiscountedReward << endl;
 
-   int* rolloutActions = new int[15];
-   int* rolloutRewards = new int[15];
-   vector<int>* rolloutObservations = new vector<int>[15];
+   int* rolloutActions = new int[rolloutDepth];
+   float* rolloutRewards = new float[rolloutDepth];
+   vector<int>* rolloutObservations = new vector<int>[rolloutDepth];
    
    //Now do the rest of the batches
    for(int b = 1; b < numBatches; b++)
@@ -647,7 +647,7 @@ int main(int argc, char** argv)
 	    {
 	       term = rand();
 	       term = term%10;
-	       int a = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
+	       int a = explorationPolicy(world, worldReward, obsContext[0], t, discountFactor, rolloutDepth, numActions, explorationType);
 	       world->takeAction(a, obsContext[0], reward, endEpisode);
 	       if(daggerType > 0)
 	       {
@@ -662,7 +662,7 @@ int main(int argc, char** argv)
 	    coin = coin%2;
 	    if(daggerType == 0 || coin) //If doing regular DAgger, or if coin comes up heads: just use the exploration policy
 	    {
-	       nextAct = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
+	       nextAct = explorationPolicy(world, worldReward, obsContext[0], t, discountFactor, rolloutDepth, numActions, explorationType);
 	    }
 	    else //Otherwise use exploration policy in the last step
 	    {
@@ -670,7 +670,7 @@ int main(int argc, char** argv)
 	       nextAct = policyCache[hash];
 	       if(!nextAct)
 	       {
-		  nextAct = mcts(model, discountFactor, obsContext[0]);
+		  nextAct = mcts(model, rewardModel, discountFactor, rolloutDepth, obsContext[0]);
 		  policyCache[hash] = nextAct + 1;
 	       }
 	       else
@@ -692,7 +692,7 @@ int main(int argc, char** argv)
 	       int a = policyCache[hash];
 	       if(!a)
 	       {
-		  a = mcts(model, discountFactor, obsContext[0]);
+		  a = mcts(model, rewardModel, discountFactor, rolloutDepth, obsContext[0]);
 		  policyCache[hash] = a + 1;
 	       }
 	       else
@@ -709,7 +709,7 @@ int main(int argc, char** argv)
 	    nextAct = policyCache[hash];
 	    if(!nextAct)
 	    {
-	       nextAct = mcts(model, discountFactor, obsContext[0]);
+	       nextAct = mcts(model, rewardModel, discountFactor, rolloutDepth, obsContext[0]);
 	       policyCache[hash] = nextAct + 1;
 	    }
 	    else
@@ -723,18 +723,19 @@ int main(int argc, char** argv)
 
 	 if(daggerType == 1) //The hallucinated context starts out the same as the regular context
 	 {
-	    mcts(model, discountFactor, obsContext[0], false, nextAct, rolloutActions, rolloutRewards, rolloutObservations); 
+	    mcts(model, rewardModel, discountFactor, rolloutDepth, obsContext[0], false, nextAct, rolloutActions, rolloutRewards, rolloutObservations); 
 	    vector<vector<int> > hObsContext(1);
 	    
-	    for(int h = 0; h < 15; h++)
+	    for(int h = 0; h < rolloutDepth; h++)
 	    {
 	       if(b >= h*hDelay && h <= maxH)  //If hallucinating and if we've seen enough batches for this depth, and if we're not past the maximum depth, use the hallucinated context
 	       {
 		  hObsContext[0] = rolloutObservations[h];
 		  dataset.push_back(make_tuple(hObsContext, actContext, nextAct, nextObs, 0, false));
+		  rDataset.push_back(make_tuple(hObsContext[0], actContext[0], reward));
 	       }
 
-	       if(h < 14)
+	       if(h < rolloutDepth-1)
 	       {
 		  obsContext[0] = nextObs;
 		  actContext[0] = nextAct;	       
@@ -746,15 +747,17 @@ int main(int argc, char** argv)
 	 else
 	 {
 	    dataset.push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
+	    rDataset.push_back(make_tuple(obsContext[0], actContext[0], reward));
 	 }	 
       }
 
       //Update the model
       model->batchUpdate(dataset);
-
+      rewardModel->batchUpdate(rDataset);
+      
       //Evaluate the policy for this batch
       policyCache.clear();
-      double averageDiscountedReward = evaluate(model, world, discountFactor, policyCache);
+      double averageDiscountedReward = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutDepth, policyCache);
       cout << "Batch " << b << " Discounted Reward: " << averageDiscountedReward << endl;
       fout << averageDiscountedReward << endl;
    }
