@@ -398,7 +398,7 @@ int main(int argc, char** argv)
    int hDelay = 10;
    int maxH = atoi(argv[8]);
 
-   int outputNoteIndex = 8;
+   int outputNoteIndex = 9;
    string outputNote;
    if(argc > outputNoteIndex)
    {
