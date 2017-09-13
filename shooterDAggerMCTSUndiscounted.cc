@@ -25,7 +25,6 @@ struct MCTSNode
    vector<double> summedReturns;
    vector<int> counts;
    int totalCount;
-//   vector<unordered_map<size_t, int> > children;
    vector<int> children;
    int parent;
    MCTSNode(int numActions, int parentIndex){summedReturns.resize(numActions, 0); counts.resize(numActions, 0); children.resize(numActions); totalCount=0; parent=parentIndex;}
@@ -252,10 +251,18 @@ int mcts(SamplingModel<int>* model, RewardModel* rewardModel, double discountFac
    MCTSNode* root = &(tree[0]);
    double maxVal = -numeric_limits<double>::infinity();
    vector<int> maxActs;
+   if(printRollouts)
+   {
+      cout << "Q-values" << endl;
+   }
+
    for(int a = 0; a < numActions; a++)
    {
       double qValue = root->summedReturns[a]/root->counts[a];
-      //cout << a << ": " << qValue << " " << root->counts[a] << endl;
+      if(printRollouts)
+      {
+	 cout << a << ": " << qValue << " " << root->counts[a] << endl;
+      }
       if(fabs(qValue - maxVal) <= 1e-6)
       {
 	 maxActs.push_back(a);
@@ -287,6 +294,9 @@ double evaluate(ConvolutionalBinaryCTS* model, RewardModel* rewardModel, Shooter
    double totalDiscountedReward = 0;
    int numEpisodes = 1;
 
+   float rewardErr = 0;
+   float ll = 0;
+
    cout << "Evaluating ";
    cout.flush();
    for(int ep = 0; ep < numEpisodes; ep++)
@@ -305,7 +315,6 @@ double evaluate(ConvolutionalBinaryCTS* model, RewardModel* rewardModel, Shooter
 
       for(int t = 0; t < 30; t++)
       {
-
 	 size_t hash = hash_range(obs.begin(), obs.end());
 	 int action = policyCache[hash];
 	 if(!action)
@@ -318,14 +327,38 @@ double evaluate(ConvolutionalBinaryCTS* model, RewardModel* rewardModel, Shooter
 	    action--;
 	 }
 
+
 	 float r = worldReward->getReward(action, obs);
+
+	 float modelR = rewardModel->getReward(action, obs);
+	 rewardErr += (r - modelR)*(r - modelR);
+
 	 world->takeAction(action, obs, reward, endEpisode);
+
+	 double prob = model->predict(action, obs);
+	 ll += log(prob);
+
+	 if(printRollouts)
+	 {
+	    cout << "Real step: " << t << " A: " << action << endl;
+	    for(int y = 0; y < 15; y++)
+	    {
+	       for(int x = 0; x < 15; x++)
+	       {
+		  cout << (obs[y*15 + x] ? "#" : ".");
+	       }
+	       cout << endl;
+	    }
+	    cout << "R: " << reward << " Model R: " << modelR << " Prob: " << prob << endl;
+	 }
+
 	 totalDiscountedReward += discount*r;
 	 discount *= discountFactor;
 
 	 model->update(action, obs, 0, false, false);
       }
    }
+   cout << "LL: " << ll << " RewardMSE: " << rewardErr/(30*numEpisodes) << " ";
    return totalDiscountedReward/numEpisodes;
 }
 
@@ -566,28 +599,31 @@ int main(int argc, char** argv)
       vector<int> actContext(1);
       int nextAct;
       vector<int> nextObs;
-      int reward;
+      int dummyReward;
       bool endEpisode;
+      float reward;
 
       //Make a context
-      world->takeAction(0, obsContext[0], reward, endEpisode);
+      world->takeAction(0, obsContext[0], dummyReward, endEpisode);
       actContext[0] = 0;
 
       int t = 0;
       while(rand()%10 < gamma)
       {
 	 int a = explorationPolicy(world, worldReward, obsContext[0], t, discountFactor, rolloutDepth, numActions, explorationType);
-	 world->takeAction(a, obsContext[0], reward, endEpisode);
+	 reward = worldReward->getReward(a, obsContext[0]);
+	 world->takeAction(a, obsContext[0], dummyReward, endEpisode);
 	 actContext[0] = a;
 	 t++;
       }
 
       int a = explorationPolicy(world, worldReward, obsContext[0], t, discountFactor, rolloutDepth, numActions, explorationType);
-      world->takeAction(a, nextObs, reward, endEpisode);
+      reward = worldReward->getReward(a, obsContext[0]);
+      world->takeAction(a, nextObs, dummyReward, endEpisode);
       nextAct = a;
 
       dataset.push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
-      rDataset.push_back(make_tuple(obsContext[0], actContext[0], reward));
+      rDataset.push_back(make_tuple(obsContext[0], nextAct, reward));
    }
 
    //Update the model
@@ -626,10 +662,10 @@ int main(int argc, char** argv)
 	 vector<int> prevObs;
 	 int nextAct;
 	 vector<int> nextObs;
-	 int reward;
+	 int dummyReward;
 	 bool endEpisode;
 	 //Make a context
-	 world->takeAction(0, obsContext[0], reward, endEpisode);
+	 world->takeAction(0, obsContext[0], dummyReward, endEpisode);
 	 model->update(0, obsContext[0], 0, false, false);
 
 	 actContext[0] = 0;
@@ -648,7 +684,7 @@ int main(int argc, char** argv)
 	       term = rand();
 	       term = term%10;
 	       int a = explorationPolicy(world, worldReward, obsContext[0], t, discountFactor, rolloutDepth, numActions, explorationType);
-	       world->takeAction(a, obsContext[0], reward, endEpisode);
+	       world->takeAction(a, obsContext[0], dummyReward, endEpisode);
 	       if(daggerType > 0)
 	       {
 		  model->update(a, obsContext[0], 0, false, false);
@@ -700,7 +736,7 @@ int main(int argc, char** argv)
 		  a--;
 	       }
 
-	       world->takeAction(a, obsContext[0], reward, endEpisode);
+	       world->takeAction(a, obsContext[0], dummyReward, endEpisode);
 	       model->update(a, obsContext[0], 0, false, false);
 	       actContext[0] = a;
 	    }
@@ -719,7 +755,7 @@ int main(int argc, char** argv)
 	 }
 
 	 //We have now sampled a state and action -- take the action in that state
-	 world->takeAction(nextAct, nextObs, reward, endEpisode);
+	 world->takeAction(nextAct, nextObs, dummyReward, endEpisode);
 
 	 if(daggerType == 1) //The hallucinated context starts out the same as the regular context
 	 {
@@ -732,7 +768,20 @@ int main(int argc, char** argv)
 	       {
 		  hObsContext[0] = rolloutObservations[h];
 		  dataset.push_back(make_tuple(hObsContext, actContext, nextAct, nextObs, 0, false));
-		  rDataset.push_back(make_tuple(hObsContext[0], actContext[0], reward));
+		  float reward = worldReward->getReward(nextAct, obsContext[0]);
+		  rDataset.push_back(make_tuple(hObsContext[0], nextAct, reward));
+/*		  if(b >= 10)
+		  { 
+		     cout << "Datapoint: " << h << " A: " << nextAct << " R: " << reward << endl;
+		     for(int y = 0; y < 15; y++)
+		     {
+			for(int x = 0; x < 15; x++)
+			{
+			   cout << (hObsContext[0][y*15 + x] ? "#" : ".");
+			}
+			cout << endl;
+		     }
+		     }*/
 	       }
 
 	       if(h < rolloutDepth-1)
@@ -740,14 +789,15 @@ int main(int argc, char** argv)
 		  obsContext[0] = nextObs;
 		  actContext[0] = nextAct;	       
 		  nextAct = rolloutActions[h+1];
-		  world->takeAction(nextAct, nextObs, reward, endEpisode);
+		  world->takeAction(nextAct, nextObs, dummyReward, endEpisode);
 	       }
 	    }
 	 }
 	 else
 	 {
 	    dataset.push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
-	    rDataset.push_back(make_tuple(obsContext[0], actContext[0], reward));
+	    float reward = worldReward->getReward(nextAct, obsContext[0]);
+	    rDataset.push_back(make_tuple(obsContext[0], nextAct, reward));
 	 }	 
       }
 
@@ -757,7 +807,7 @@ int main(int argc, char** argv)
       
       //Evaluate the policy for this batch
       policyCache.clear();
-      double averageDiscountedReward = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutDepth, policyCache);
+      double averageDiscountedReward = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutDepth, policyCache);//, b >= 10);
       cout << "Batch " << b << " Discounted Reward: " << averageDiscountedReward << endl;
       fout << averageDiscountedReward << endl;
    }

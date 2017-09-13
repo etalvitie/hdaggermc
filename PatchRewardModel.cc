@@ -1,7 +1,9 @@
 #include "PatchRewardModel.h"
 
-PatchRewardModel::PatchRewardModel(int numActions, int width, int height, int patchWidth, int patchHeight, float stepSize) : numActions(numActions), width(width), height(height), stepSize(stepSize)
+PatchRewardModel::PatchRewardModel(int numActions, int width, int height, int patchWidth, int patchHeight, float stepSize) : numActions(numActions), width(width), height(height)
 {
+   this->stepSize = stepSize/(width*height+1);
+
    numPatches = pow(3, patchWidth*patchHeight);   
    
    weights.resize(numActions);
@@ -32,6 +34,17 @@ PatchRewardModel::PatchRewardModel(int numActions, int width, int height, int pa
 
 void PatchRewardModel::getActiveFeatures(int action, const vector<int>& obs, vector<int>& indices) const
 {
+   /*
+   cout << endl;
+   for(int r = 0; r < height; r++)
+   {
+      for(int c = 0; c < width; c++)
+      {
+	 cout << (obs[r*width + c] ? "#" : ".");
+      }
+      cout << endl;
+   }
+   */
    indices.clear();
 
    indices.push_back(0);
@@ -54,9 +67,17 @@ void PatchRewardModel::getActiveFeatures(int action, const vector<int>& obs, vec
 	 }
       }
 
+//      cout << index << "(";
+
       index += p*numPatches + 1;
+
+//      cout << index << ") ";
+//      if(p%15 == 14)
+//	 cout << endl;
+
       indices.push_back(index);
    }
+
 }
 
 float PatchRewardModel::getReward(int action, const vector<int>& obs) const
@@ -97,15 +118,29 @@ void PatchRewardModel::batchUpdate(const vector<tuple<vector<int>, int, float> >
       float myR = getRewardFromIndices(act, activeFeatures);
 
       float error = r - myR;
-
-      numDataPoints[act]++;
+/*
+      if(error != 0)
+      {
+	 cout << endl;
+	 for(int r = 0; r < height; r++)
+	 {
+	    for(int c = 0; c < width; c++)
+	    {
+	       cout << (obs[r*width + c] ? "#" : ".");
+	    }
+	    cout << endl;
+	 }
+	 cout << "Action: " << act << " R: " << r << " MyR: " << myR << endl;
+      }
+*/
+//      numDataPoints[act]++;
       for(unsigned i = 0; i < activeFeatures.size(); i++)
       {
-	 int index = activeFeatures[i];
-	 updates[act][index] += error;
+//	 updates[act][activeFeatures[i]] += error;
+	 weights[act][activeFeatures[i]] += stepSize*error;
       }
    }
-
+/*
    for(int a = 0; a < numActions; a++)
    {
       for(unordered_map<int, float>::iterator iter = updates[a].begin(); iter != updates[a].end(); iter++)
@@ -113,4 +148,5 @@ void PatchRewardModel::batchUpdate(const vector<tuple<vector<int>, int, float> >
 	 weights[a][iter->first] += stepSize * iter->second/numDataPoints[a];
       }
    }
+*/
 }
