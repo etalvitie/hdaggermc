@@ -1,6 +1,5 @@
 /********************
 Author: Erik Talvitie
-Date: 2016
 ********************/
 
 #include "ConvolutionalBinaryCTS.h"
@@ -52,9 +51,8 @@ int rewardFunction(const vector<int>& obs, int act)
    beond maxD, will simply repeat the maxDth model. Pass -1 to
    use the entire depth of the model.
    printReturns/printRollouts - if true, prints things for debugging.*/
-int onePlyMC(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, const vector<int>& curObs, int maxD=-1, bool printReturns=false, bool printRollouts=false)
+int onePlyMC(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor, int rolloutsPerA, int rolloutDepth, const vector<int>& curObs, int maxD=-1, bool printReturns=false, bool printRollouts=false)
 {
-   int rolloutDepth = 15; //Hardcoding this for now. Probably ought to be a parameter...
    int maxModelDepth = maxD;
    if(maxD < 0 || maxD > int(model.size()))
    {
@@ -65,7 +63,7 @@ int onePlyMC(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor
    vector<double> returns(numActions, 0);
    for(int a = 0; a < numActions; a++)
    {
-      for(int rollout = 0; rollout < 50; rollout++)
+      for(int rollout = 0; rollout < rolloutsPerA; rollout++)
       {
 	 for(int m = 0; m < maxModelDepth; m++)
 	 {
@@ -165,14 +163,13 @@ int onePlyMC(const vector<ConvolutionalBinaryCTS*>& model, double discountFactor
    and uses one-ply Monte Carlo to choose an action.
    Optional parameters:
    printReturns/printRollouts - if true, prints things for debugging.*/
-int onePlyMC(SamplingModel<int>* model, double discountFactor, const vector<int>& curObs, bool printReturns=false, bool printRollouts=false)
+int onePlyMC(SamplingModel<int>* model, double discountFactor, int rolloutsPerA, int rolloutDepth, const vector<int>& curObs, bool printReturns=false, bool printRollouts=false)
 {
-   int rolloutDepth = 15;
    int numActions = model->getNumActs();
    vector<double> returns(numActions, 0);
    for(int a = 0; a < numActions; a++)
    {
-      for(int rollout = 0; rollout < 50; rollout++)
+      for(int rollout = 0; rollout < rolloutsPerA; rollout++)
       {
 	 model->saveState();
 
@@ -262,7 +259,7 @@ int onePlyMC(SamplingModel<int>* model, double discountFactor, const vector<int>
   each state is assigned a single action.
   maxD - See onePlyMC
   printRollouts - See onePlyMC*/
-double evaluate(const vector<ConvolutionalBinaryCTS*>& model, ShooterModel* world, double discountFactor, unordered_map<size_t, int>& policyCache, int maxD=-1, bool printRollouts=false)
+double evaluate(const vector<ConvolutionalBinaryCTS*>& model, ShooterModel* world, double discountFactor, int numRollouts, int rolloutDepth, unordered_map<size_t, int>& policyCache, int maxD=-1, bool printRollouts=false)
 {
    double totalDiscountedReward = 0;
    int numEpisodes = 1;
@@ -288,7 +285,7 @@ double evaluate(const vector<ConvolutionalBinaryCTS*>& model, ShooterModel* worl
       vector<int> obs;
 
       world->takeAction(0, obs, reward, endEpisode);
-      for(int m = 0; m < 15; m++)
+      for(int m = 0; m < rolloutDepth; m++)
       {
 	 model[m]->update(0, obs, reward, false, false);
       }
@@ -301,7 +298,7 @@ double evaluate(const vector<ConvolutionalBinaryCTS*>& model, ShooterModel* worl
 	 int action = policyCache[hash];
 	 if(!action)
 	 {
-	    action = onePlyMC(model, discountFactor, obs, maxD, false, printRollouts);
+	    action = onePlyMC(model, discountFactor, numRollouts, rolloutDepth, obs, maxD, false, printRollouts);
 	    policyCache[hash] = action + 1;
 	 }
 	 else
@@ -327,7 +324,7 @@ double evaluate(const vector<ConvolutionalBinaryCTS*>& model, ShooterModel* worl
   Type 0: Uniform random
   Type 1: Optimal policy
   Type 2: One-ply MC with a perfect model*/
-int explorationPolicy(ShooterModel* world, vector<int>& curObs, int t, double discountFactor, int numActions, int type)
+int explorationPolicy(ShooterModel* world, vector<int>& curObs, int t, double discountFactor, int numRollouts, int rolloutDepth, int numActions, int type)
 {
    int a = 0;
    if(type == 0) //Uniform random policy
@@ -336,7 +333,7 @@ int explorationPolicy(ShooterModel* world, vector<int>& curObs, int t, double di
    }
    else if(type == 2) //One-ply MC with a perfect model
    {
-      a = onePlyMC(world, discountFactor, curObs);
+      a = onePlyMC(world, discountFactor, numRollouts, rolloutDepth, curObs);
    }
    else if(type == 1) //Optimal policy
    {
@@ -352,11 +349,13 @@ int explorationPolicy(ShooterModel* world, vector<int>& curObs, int t, double di
 
 int main(int argc, char** argv)
 {
-   if(argc <= 6)
+   if(argc <= 8)
    {
       cout << "Usage: ./shooterDAggerUnrolled algorithm explorationType trial numBatches samplesPerBatch movingBullseye [outputFileNote]" << endl;
       cout << "algorithm -- 0: DAgger-MC, 1: H-DAgger-MC, 2: One-ply MC with perfect model, 3: Uniform random, 4: Optimal policy" << endl;
       cout << "explorationType -- 0: Uniform random, 1: Optimal policy, 2: One-ply MC with perfect model" << endl;
+      cout << "numRollouts -- the number of rollouts to perform during planning" << endl;
+      cout << "rolloutDepth -- the depth of each rollout during planning" << endl;
       cout << "trial -- the trial number (determines the random seed)" << endl;
       cout << "numBatches -- the number of batches to generate in DAgger-based algorithms" << endl;
       cout << "samplesPerBatch -- the number of samples to generate in each batch" << endl;
@@ -379,15 +378,17 @@ int main(int argc, char** argv)
    //1: Optimal
    //2: One-ply MC
    int explorationType = atoi(argv[2]);
-   int trial = atoi(argv[3]);
-   int numBatches = atoi(argv[4]);
-   int samplesPerBatch = atoi(argv[5]);
+   int numRollouts = atoi(argv[3]);
+   int rolloutDepth = atoi(argv[4]);
+   int trial = atoi(argv[5]);
+   int numBatches = atoi(argv[6]);
+   int samplesPerBatch = atoi(argv[7]);
    int neighborhoodWidth = 7;
    int neighborhoodHeight = 7;
-   bool movingSweetSpot = atoi(argv[6]);
+   bool movingSweetSpot = atoi(argv[8]);
    int hDelay = 10;
 
-   int outputNoteIndex = 7;
+   int outputNoteIndex = 9;
    string outputNote;
    if(argc > outputNoteIndex)
    {
@@ -423,6 +424,11 @@ int main(int argc, char** argv)
       outSS << ".Optimal";
    }   
 
+   if(daggerType < 3)
+   {
+      outSS << ".nRollouts" << numRollouts << ".rolloutD" << rolloutDepth;
+   }
+
    if(daggerType < 2)
    {
       if(explorationType == 0)
@@ -450,9 +456,9 @@ int main(int argc, char** argv)
    int numTargets = 3;
    int numActions = 4;
    ShooterModel* world = new ShooterModel(numTargets, height, movingSweetSpot);
-   vector<ConvolutionalBinaryCTS*> model(15);
+   vector<ConvolutionalBinaryCTS*> model(rolloutDepth);
 
-   for(int m = 0; m < 15; m++)
+   for(int m = 0; m < rolloutDepth; m++)
    {
       model[m] = new ConvolutionalBinaryCTS(height, numTargets*5, neighborhoodHeight, neighborhoodWidth, numActions, 1, trial + 1);
    }
@@ -484,7 +490,7 @@ int main(int argc, char** argv)
 	       action = policyCache[hash];
 	       if(!action)
 	       {
-		  action = onePlyMC(world, discountFactor, obs);
+		  action = onePlyMC(world, discountFactor, numRollouts, rolloutDepth, obs);
 		  policyCache[hash] = action + 1;
 	       }
 	       else
@@ -521,7 +527,7 @@ int main(int argc, char** argv)
    //Otherwise...we are actually doing DAgger.
 
    //One dataset for each sub-model
-   vector<vector<tuple<vector<vector<int> >, vector<int>, int, vector<int>, int, bool> > > dataset(15); //obs context, action context, nextAct, nextObs, reward, endEpisode
+   vector<vector<tuple<vector<vector<int> >, vector<int>, int, vector<int>, int, bool> > > dataset(rolloutDepth); //obs context, action context, nextAct, nextObs, reward, endEpisode
 
    //First batch uses only exploration policy
    cout << "Generating Samples";
@@ -550,17 +556,17 @@ int main(int argc, char** argv)
       int t = 0;
       while(rand()%10 < gamma)
       {
-	 int a = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
+	 int a = explorationPolicy(world, obsContext[0], t, numRollouts, rolloutDepth, discountFactor, numActions, explorationType);
 	 world->takeAction(a, obsContext[0], reward, endEpisode);
 	 actContext[0] = a;
 	 t++;
       }
 
-      int a = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
+      int a = explorationPolicy(world, obsContext[0], t, discountFactor, numRollouts, rolloutDepth, numActions, explorationType);
       world->takeAction(a, nextObs, reward, endEpisode);
       nextAct = a;
 
-      for(int m = 0; m < 15; m++)
+      for(int m = 0; m < rolloutDepth; m++)
       {
 	 dataset[m].push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false)); 
       }
@@ -568,7 +574,7 @@ int main(int argc, char** argv)
    
    if(daggerType == 0) //If not hallucinating, then update everything
    {
-      for(int m = 0; m < 15; m++)
+      for(int m = 0; m < rolloutDepth; m++)
       {
 	 model[m]->batchUpdate(dataset[m]);
       }
@@ -580,14 +586,14 @@ int main(int argc, char** argv)
 
    //Evaluate the first policy
    policyCache.clear();
-   double averageDiscountedReward = evaluate(model, world, discountFactor, policyCache, 1);
+   double averageDiscountedReward = evaluate(model, world, discountFactor, numRollouts, rolloutDepth, policyCache, 1);
    cout << "Batch 0 Average Discounted Reward: " << averageDiscountedReward << endl;
    fout << averageDiscountedReward << endl;
 
    //Now do the rest of the batches
    for(int b = 1; b < numBatches; b++)
    {
-      for(int m = 0; m < 15; m++)
+      for(int m = 0; m < rolloutDepth; m++)
       {
 	 dataset[m].clear();
       }
@@ -603,7 +609,7 @@ int main(int argc, char** argv)
 	 }
 
 	 world->reset();
-	 for(int m = 0; m < 15; m++)
+	 for(int m = 0; m < rolloutDepth; m++)
 	 {
 	    model[m]->reset();
 	 }
@@ -616,7 +622,7 @@ int main(int argc, char** argv)
 	 bool endEpisode;
 	 //Make a context
 	 world->takeAction(0, obsContext[0], reward, endEpisode);
-	 for(int m = 0; m < 15; m++)
+	 for(int m = 0; m < rolloutDepth; m++)
 	 {
 	    model[m]->update(0, obsContext[0], 0, false, false);
 	 }
@@ -636,10 +642,10 @@ int main(int argc, char** argv)
 	    {
 	       term = rand();
 	       term = term%10;
-	       int a = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
+	       int a = explorationPolicy(world, obsContext[0], t, discountFactor, numRollouts, rolloutDepth, numActions, explorationType);
 	       world->takeAction(a, obsContext[0], reward, endEpisode);
 
-	       for(int m = 0; m < 15; m++)
+	       for(int m = 0; m < rolloutDepth; m++)
 	       {
 		  model[m]->update(a, obsContext[0], 0, false, false);
 	       }
@@ -653,7 +659,7 @@ int main(int argc, char** argv)
 	    coin = coin%2;
 	    if(coin) //If coin comes up heads: just use the exploration policy
 	    {
-	       nextAct = explorationPolicy(world, obsContext[0], t, discountFactor, numActions, explorationType);
+	       nextAct = explorationPolicy(world, obsContext[0], t, discountFactor, numRollouts, rolloutDepth, numActions, explorationType);
 	    }
 	    else //Otherwise use exploration policy in the last step
 	    {
@@ -661,7 +667,7 @@ int main(int argc, char** argv)
 	       nextAct = policyCache[hash];
 	       if(!nextAct)
 	       {
-		  nextAct = onePlyMC(model, discountFactor, obsContext[0], hDelay > 0 ? b/hDelay+1 : -1);
+		  nextAct = onePlyMC(model, discountFactor, numRollouts, rolloutDepth, obsContext[0], hDelay > 0 ? b/hDelay+1 : -1);
 		  policyCache[hash] = nextAct + 1;
 	       }
 	       else
@@ -683,7 +689,7 @@ int main(int argc, char** argv)
 	       int a = policyCache[hash];
 	       if(!a)
 	       {
-		  a = onePlyMC(model, discountFactor, obsContext[0], hDelay > 0 ? b/hDelay+1 : -1);
+		  a = onePlyMC(model, discountFactor, numRollouts, rolloutDepth, obsContext[0], hDelay > 0 ? b/hDelay+1 : -1);
 		  policyCache[hash] = a + 1;
 	       }
 	       else
@@ -692,7 +698,7 @@ int main(int argc, char** argv)
 	       }
 
 	       world->takeAction(a, obsContext[0], reward, endEpisode);
-	       for(int m = 0; m < 15; m++)
+	       for(int m = 0; m < rolloutDepth; m++)
 	       {
 		  model[m]->update(a, obsContext[0], 0, false, false);
 	       }
@@ -703,7 +709,7 @@ int main(int argc, char** argv)
 	    nextAct = policyCache[hash];
 	    if(!nextAct)
 	    {
-	       nextAct = onePlyMC(model, discountFactor, obsContext[0], hDelay > 0 ? b/hDelay+1 : -1);
+	       nextAct = onePlyMC(model, discountFactor, numRollouts, rolloutDepth, obsContext[0], hDelay > 0 ? b/hDelay+1 : -1);
 	       policyCache[hash] = nextAct + 1;
 	    }
 	    else
@@ -722,7 +728,7 @@ int main(int argc, char** argv)
 	 {
 	    hObsContext = obsContext;
 	 }
-	 for(int m = 0; m < 15; m++)
+	 for(int m = 0; m < rolloutDepth; m++)
 	 {
 	    if(daggerType == 0) //If not hallucinating, just use the regular context to create the data point
 	    {
@@ -736,7 +742,7 @@ int main(int argc, char** argv)
 	    if(daggerType == 1 && b >= (m+1)*hDelay) //If hallucinating and if seen enough batches for this depth, roll the model forward (sample and update)
 	    {
 	       model[m]->sample(nextAct, hObsContext[0], hReward, hEnd);
-	       if(m < 14)
+	       if(m < rolloutDepth-1)
 	       {
 		  model[m+1]->update(nextAct, hObsContext[0], 0, false, false);
 	       }
@@ -751,14 +757,14 @@ int main(int argc, char** argv)
       }
 
       //Update all the models
-      for(int m = 0; m < 15; m++)
+      for(int m = 0; m < rolloutDepth; m++)
       {
 	 model[m]->batchUpdate(dataset[m]);
       }
 
       //Evaluate the policy for this batch
       policyCache.clear();
-      double averageDiscountedReward = evaluate(model, world, discountFactor, policyCache, hDelay > 0 ? b/hDelay+1 : -1);
+      double averageDiscountedReward = evaluate(model, world, discountFactor, numRollouts, rolloutDepth, policyCache, hDelay > 0 ? b/hDelay+1 : -1);
       cout << "Batch " << b << " Discounted Reward: " << averageDiscountedReward << endl;
       fout << averageDiscountedReward << endl;
    }
