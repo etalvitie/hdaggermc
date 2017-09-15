@@ -102,7 +102,7 @@ class ConvolutionalBinaryCTS : public SamplingModel<int>
 
    //Give the probability of the observation
    //given the action and the model's current state
-   double predict(int act, const vector<int>& obs) const;
+   double predict(int act, const vector<int>& obs, bool print=false) const;
    //Give the probability of the reward
    //given the action and the model's current state
    double predictR(int act, const vector<int>& obs, int reward) const;

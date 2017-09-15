@@ -328,7 +328,7 @@ void ConvolutionalBinaryCTS::sample(int traj, int step, int action, vector<int>&
    endTraj = s;
 }
 
-double ConvolutionalBinaryCTS::predict(int act, const vector<int>& obs) const
+double ConvolutionalBinaryCTS::predict(int act, const vector<int>& obs, bool print) const
 {
    double prediction = 1;
    vector<bit_t> action(bitsPerAction);
@@ -339,6 +339,12 @@ double ConvolutionalBinaryCTS::predict(int act, const vector<int>& obs) const
       ct->updateHistory(action);
       bit_t symb = obs[p] ? true : false;
       double prob = ct->prob(symb);
+      if(print)
+      {
+	 if(p%width == 0)
+	    cout << endl;
+	 cout << prob << " ";
+      }
       prediction *= prob;
    }
 
