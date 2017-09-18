@@ -17,7 +17,7 @@ Author: Erik Talvitie
 
 using namespace std;
 using namespace boost;
-
+/*
 //Useful struct for MCTS planning
 struct MCTSNode
 {
@@ -28,12 +28,12 @@ struct MCTSNode
    int parent;
    MCTSNode(int numActions, int parentIndex){summedReturns.resize(numActions, 0); counts.resize(numActions, 0); children.resize(numActions); totalCount=0; parent=parentIndex;}
 };
-
+*/
 /* Takes a model, discount factor, current observation
    and uses one-ply Monte Carlo to choose an action.
    Optional parameters:
    printRollouts - if true, prints things for debugging.*/
-int mcts(SamplingModel<int>* model, RewardModel* rewardModel, double discountFactor, int numRollouts, int rolloutDepth, const vector<int>& curObs, bool printRollouts=false, int firstAction=-1, int* rolloutActions=0, float* rolloutRewards=0, vector<int>* rolloutObs=0)
+ /*int mcts(SamplingModel<int>* model, RewardModel* rewardModel, double discountFactor, int numRollouts, int rolloutDepth, const vector<int>& curObs, bool printRollouts=false, int firstAction=-1, int* rolloutActions=0, float* rolloutRewards=0, vector<int>* rolloutObs=0)
 {
    int numActions = model->getNumActs();
    vector<MCTSNode> tree(1, MCTSNode(numActions, -1));
@@ -275,7 +275,272 @@ int mcts(SamplingModel<int>* model, RewardModel* rewardModel, double discountFac
 
    return maxActs[rand()%maxActs.size()];
 }
+*/
+
+//Useful struct for MCTS planning
+struct MCTSNode
+{
+   vector<double> summedReturns;
+   vector<int> counts;
+   int totalCount;
+   MCTSNode(int numActions){summedReturns.resize(numActions, 0); counts.resize(numActions, 0); totalCount=0;}
+};
       
+/* Takes a model, discount factor, current observation
+   and uses one-ply Monte Carlo to choose an action.
+   Optional parameters:
+   printRollouts - if true, prints things for debugging.*/
+int mcts(SamplingModel<int>* model, RewardModel* rewardModel, double discountFactor, int numRollouts, int rolloutDepth, const vector<int>& curObs, bool printRollouts=false, int firstAction=-1, int* rolloutActions=0, float* rolloutRewards=0, vector<int>* rolloutObs=0)
+{
+   int numActions = model->getNumActs();
+   vector<MCTSNode*> nodes;
+   vector<unordered_map<size_t, MCTSNode*> > tree(rolloutDepth);
+   nodes.push_back(new MCTSNode(numActions));
+   size_t rootHash = hash_range(curObs.begin(), curObs.end());
+   tree[0][rootHash] = nodes[0];
+   int numActionRollouts = 0;      
+   for(int rollout = 0; rollout < numRollouts; rollout++)
+   {
+      if(printRollouts)
+      {
+	 cout << "Rollout " << rollout << endl;
+      }
+      model->saveState();
+
+      int t = 0;
+
+      vector<int> obs = curObs;
+      vector<float> rewards;
+      vector<int> actions;
+      vector<MCTSNode*> rolloutNodes;
+      MCTSNode* curNode = nodes[0];
+      double rolloutReturn = 0;   
+      bool saveRollout = false;	       
+      //Move down the tree until a node is missing a child
+      while(t < rolloutDepth && curNode->totalCount >= numActions)
+      {      
+	 vector<int> maxActs;
+	 double maxScore = -numeric_limits<double>::infinity();
+	 for(int a = 0; a < numActions; a++)
+	 {
+	    double score = curNode->summedReturns[a]/curNode->counts[a] + 12*sqrt(log(curNode->totalCount)/curNode->counts[a]);
+	    if(score-maxScore > 1e-6)
+	    {
+	       maxActs.clear();
+	       maxActs.push_back(a);
+	       maxScore = score;
+	    }
+	    else if(fabs(score-maxScore) <= 1e-6)
+	    {
+	       maxActs.push_back(a);
+	    }	 
+	 }
+	 int action = maxActs[rand()%maxActs.size()];
+	 float reward = rewardModel->getReward(action, obs);
+	 rolloutNodes.push_back(curNode);
+	 rewards.push_back(reward);
+	 actions.push_back(action);
+
+	 if(t == 0 && action == firstAction)
+	 {
+	    numActionRollouts++;
+	    int r = rand()%numActionRollouts;
+	    if(r == 0)
+	    {
+	       saveRollout = true;
+	    }
+	 }
+
+	 if(saveRollout)
+	 {
+	    rolloutActions[t] = action;
+	    rolloutRewards[t] = reward;
+	    rolloutObs[t] = obs;
+	 }
+	 
+	 bool endEpisode;
+	 int dummyReward;
+	 model->takeAction(action, obs, dummyReward, endEpisode);
+
+	 if(printRollouts)
+	 {
+	    cout << t << ": in tree A: " << action << endl;
+	    for(int y = 0; y < 15; y++)
+	    {
+	       for(int x = 0; x < 15; x++)
+	       {
+		  cout << (obs[y*15 + x] ? "#" : ".");
+	       }
+	       cout << endl;
+	    }
+	    cout << "R: " << reward << endl;
+	 }
+
+	 t++;
+
+	 if(t < rolloutDepth)
+	 {
+	    size_t obsHash = hash_range(obs.begin(), obs.end());
+	    curNode = tree[t][obsHash];
+	    if(curNode == 0) //first time seeing this observation, need a new node
+	    {
+	       nodes.push_back(new MCTSNode(numActions));
+	       tree[t][obsHash] = nodes.back();
+	       curNode = nodes.back();
+	    }
+	 }
+      }
+
+      if(t < rolloutDepth) //Otherwise the tree is as deep as it can be
+      {
+	 //Now curNode has at least one untried action
+	 //Pick one at random so we can generate a new leaf
+	 vector<int> untried;
+	 for(int a = 0; a < numActions; a++)
+	 {
+	    if(curNode->counts[a] == 0)
+	    {
+	       untried.push_back(a);
+	    }
+	 }
+	 
+	 int action = untried[rand()%untried.size()];
+	 int reward = rewardModel->getReward(action, obs);
+	 rolloutNodes.push_back(curNode);
+	 rewards.push_back(reward);
+	 actions.push_back(action);
+	
+	 if(t == 0 && action == firstAction)
+	 {
+	    numActionRollouts++;
+	    int r = rand()%numActionRollouts;
+	    if(r == 0)
+	    {
+	       saveRollout = true;
+	    }
+	 }
+
+	 if(saveRollout)
+	 {
+	    rolloutActions[t] = action;
+	    rolloutRewards[t] = reward;
+	    rolloutObs[t] = obs;
+	 }
+
+	 bool endEpisode;
+	 int dummyReward;
+	 model->takeAction(action, obs, dummyReward, endEpisode);
+
+	 if(printRollouts)
+	 {
+	    cout << t << ": leaf A: " << action << endl;
+	    for(int y = 0; y < 15; y++)
+	    {
+	       for(int x = 0; x < 15; x++)
+	       {
+		  cout << (obs[y*15 + x] ? "#" : ".");
+	       }
+	       cout << endl;
+	    }
+	    cout << "R: " << reward << endl;
+	 }	 
+
+	 t++;
+
+	 if(t < rolloutDepth)
+	 {
+	    size_t obsHash = hash_range(obs.begin(), obs.end());
+	    nodes.push_back(new MCTSNode(numActions));
+	    tree[t][obsHash] = nodes.back();
+	    curNode = nodes.back();
+	 }
+	 
+	 //Now perform a rollout
+	 double discount = 1;
+	 while(t < rolloutDepth)
+	 {
+	    int action = rand()%numActions;
+	    int reward = rewardModel->getReward(action, obs);
+	    
+	    if(saveRollout)
+	    {
+	       rolloutActions[t] = action;
+	       rolloutRewards[t] = reward;
+	       rolloutObs[t] = obs;
+	    }
+	    
+	    bool endEpisode;
+	    int dummyReward;
+	    model->takeAction(action, obs, dummyReward, endEpisode);
+
+	    rolloutReturn += discount*reward;
+	    discount *= discountFactor;
+	    
+	    if(printRollouts)
+	    {
+	       cout << t << ": rollout A: " << action << endl;
+	       for(int y = 0; y < 15; y++)
+	       {
+		  for(int x = 0; x < 15; x++)
+		  {
+		     cout << (obs[y*15 + x] ? "#" : ".");
+		  }
+		  cout << endl;
+	       }
+	       cout << "R: " << reward << endl;
+	    }
+
+	    t++;
+	 }
+      }
+
+      //Now we back up the return
+      for(int rewardIndex = rewards.size()-1; rewardIndex >= 0; rewardIndex--)
+      {
+	 rolloutReturn = rewards[rewardIndex] + discountFactor*rolloutReturn;
+	 int action = actions[rewardIndex];
+
+	 rolloutNodes[rewardIndex]->totalCount += 1;
+	 rolloutNodes[rewardIndex]->counts[action] += 1;
+	 rolloutNodes[rewardIndex]->summedReturns[action] += rolloutReturn;
+      }
+
+      if(printRollouts)
+      {
+	 cout << "Return: " << rolloutReturn << endl;
+      }
+
+      model->retrieveState();
+   }
+
+   //Break ties randomly
+   MCTSNode* root = nodes[0];
+   double maxVal = -numeric_limits<double>::infinity();
+   vector<int> maxActs;
+   for(int a = 0; a < numActions; a++)
+   {
+      double qValue = root->summedReturns[a]/root->counts[a];
+      //cout << a << ": " << qValue << " " << root->counts[a] << endl;
+      if(fabs(qValue - maxVal) <= 1e-6)
+      {
+	 maxActs.push_back(a);
+      }
+      else if(qValue > maxVal)
+      {
+	 maxVal = qValue;
+	 maxActs.clear();
+	 maxActs.push_back(a);
+      }
+   }
+
+   for(unsigned i = 0; i < nodes.size(); i++)
+   {
+      delete nodes[i];
+   }
+   
+   return maxActs[rand()%maxActs.size()];
+}
+
 /*Evaluates the policy associated with a given model by
   executing it in the world.
   Parameters:
