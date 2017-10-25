@@ -661,11 +661,18 @@ int main(int argc, char** argv)
       if(daggerType < 2)
       {
 	 model->batchUpdate(dataset);
-	 rewardModel->batchUpdate(rDataset);
       }
       else
       {
 	 model->batchUpdate(hdataset);
+      }
+
+      if(rewardType < 2)
+      {
+	 rewardModel->batchUpdate(rDataset);
+      }
+      else
+      {
 	 rewardModel->batchUpdate(hrDataset);
       }
 
