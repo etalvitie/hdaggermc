@@ -120,6 +120,8 @@ class ConvolutionalBinaryCTS : public SamplingModel<int>
    //Trains the model using a batch of obs, action, next obs triples
    void batchUpdate(const vector<tuple<vector<vector<int> >, vector<int>, int, vector<int>, int, bool> >& dataset); //obs context, action context, nextAct, nextObs, reward, endEpisode
 
+   double batchLL(const vector<tuple<vector<vector<int> >, vector<int>, int, vector<int>, int, bool> >& dataset); //obs context, action context, nextAct, nextObs, reward, endEpisode
+
    //Save the state for future retrieval
    void saveState();
    //Retrieve the saved state

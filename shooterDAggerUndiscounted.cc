@@ -143,9 +143,13 @@ int onePlyMC(SamplingModel<int>* model, RewardModel* rewardModel, double discoun
   each time a state is visited. The cache ensures that
   each state is assigned a single action.
   printRollouts - See onePlyMC*/
-double evaluate(ConvolutionalBinaryCTS* model, RewardModel* rewardModel, ShooterModel* world, ShooterRewardModel* worldReward, double discountFactor, int rolloutsPerA, int rolloutDepth, unordered_map<size_t, int>& policyCache, bool printRollouts=false)
+tuple<double, double, double> evaluate(ConvolutionalBinaryCTS* model, RewardModel* rewardModel, ShooterModel* world, ShooterRewardModel* worldReward, double discountFactor, int rolloutsPerA, int rolloutDepth, unordered_map<size_t, int>& policyCache, bool printRollouts=false)
 {
    double totalDiscountedReward = 0;
+   double ll = 0;
+   double rewardSSE = 0;
+   int count = 0;
+
    int numEpisodes = 1;
 
    cout << "Evaluating ";
@@ -180,14 +184,19 @@ double evaluate(ConvolutionalBinaryCTS* model, RewardModel* rewardModel, Shooter
 	 }
 
 	 float r = worldReward->getReward(action, obs);
+	 float predictedR = rewardModel->getReward(action, obs);
+	 rewardSSE += (r - predictedR)*(r - predictedR);
+	 count++;
+
 	 world->takeAction(action, obs, reward, endEpisode);
 	 totalDiscountedReward += discount*r;
 	 discount *= discountFactor;
 
+	 ll += log(model->predict(action, obs));
 	 model->update(action, obs, 0, false, false);
       }
    }
-   return totalDiscountedReward/numEpisodes;
+   return make_tuple(totalDiscountedReward/numEpisodes, ll, rewardSSE/count);
 }
 
 /*Chooses an action according to the exploration policy.
@@ -224,7 +233,7 @@ int main(int argc, char** argv)
       cout << "Usage: ./shooterDAggerUnrolled algorithm explorationType trial numBatches samplesPerBatch movingBullseye maxHDepth [outputFileNote]" << endl;
       cout << "algorithm -- 0: DAgger, 1: DAgger-MC, 2: H-DAgger-MC, 3: One-ply MC with perfect model, 4: Uniform random, 5: Optimal policy" << endl;
       cout << "explorationType -- 0: Uniform random, 1: Optimal policy, 2: One-ply MC with perfect model" << endl;
-      cout << "rewardType -- 0: Perfect reward, 1: Learned reward" << endl;
+      cout << "rewardType -- 0: Perfect reward, 1: Learned from real states, 2: learned from hallucinated states" << endl;
       cout << "rolloutsPerAction -- the number of rollouts to perform for each action during planning" << endl;
       cout << "rolloutDepth -- the depth of each rollout during planning" << endl;
       cout << "trial -- the trial number (determines the random seed)" << endl;
@@ -251,7 +260,8 @@ int main(int argc, char** argv)
    //2: One-ply MC
    int explorationType = atoi(argv[2]);
    //0: Perfect
-   //1: Learned
+   //1: Learned from real states
+   //2: Learned from hallucinated states
    int rewardType = atoi(argv[3]);
    int rolloutsPerA = atoi(argv[4]);
    int rolloutDepth = atoi(argv[5]);
@@ -326,7 +336,11 @@ int main(int argc, char** argv)
 
       if(rewardType == 1)
       {
-	 outSS << ".learnedReward";
+	 outSS << ".realStateReward";
+      }
+      else if(rewardType == 2)
+      {
+	 outSS << ".hallucinatedReward";
       }
 
       outSS << ".nbhd" << neighborhoodWidth << "x" << neighborhoodHeight << ".spb" << samplesPerBatch << ".numBatches" << numBatches;
@@ -347,7 +361,7 @@ int main(int argc, char** argv)
    ConvolutionalBinaryCTS* model = new ConvolutionalBinaryCTS(height, numTargets*5, neighborhoodHeight, neighborhoodWidth, numActions, 1, trial + 1);
 
    RewardModel* rewardModel;
-   if(rewardType == 1)
+   if(rewardType > 0)
    {
       rewardModel = new PatchRewardModel(numActions, numTargets*5, height, 3, 3, 0.5);
    }
@@ -420,8 +434,10 @@ int main(int argc, char** argv)
    //Otherwise...we are actually doing DAgger.
 
    vector<tuple<vector<vector<int> >, vector<int>, int, vector<int>, int, bool> > dataset; //obs context, action context, nextAct, nextObs, reward, endEpisode
+   vector<tuple<vector<vector<int> >, vector<int>, int, vector<int>, int, bool> > hdataset; //obs context, action context, nextAct, nextObs, reward, endEpisode
 
-   vector<tuple<vector<int>, int, float> > rDataset; //obs, action, reward
+   vector<tuple<vector<int>, int, float, float> > rDataset; //obs, action, reward, weight
+   vector<tuple<vector<int>, int, float, float> > hrDataset; //obs, action, reward, weight
    
    //First batch uses only exploration policy
    cout << "Generating Samples";
@@ -463,23 +479,29 @@ int main(int argc, char** argv)
       nextAct = a;
 
       dataset.push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
-      rDataset.push_back(make_tuple(obsContext[0], nextAct, reward));
+      rDataset.push_back(make_tuple(obsContext[0], nextAct, reward, 1));
    }
 
    //Update the model
    model->batchUpdate(dataset);
    rewardModel->batchUpdate(rDataset);
 
+   double ll = model->batchLL(dataset);
+   double mse = rewardModel->batchMSE(rDataset);
+
    //Evaluate the first policy
    policyCache.clear();
-   double averageDiscountedReward = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, policyCache);//, true);
-   cout << "Batch 0 Average Discounted Reward: " << averageDiscountedReward << endl;
-   fout << averageDiscountedReward << endl;
+   tuple<double, double, double> results = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, policyCache);//, true);
+   cout << "Batch 0 Discounted Reward: " << results.get<0>() << endl;
+   fout << results.get<0>() << " " << results.get<1>() << " " << results.get<2>() << " " << ll << " " << ll << " " << mse << " " << mse << endl;
 
    //Now do the rest of the batches
    for(int b = 1; b < numBatches; b++)
    {
       dataset.clear();
+      hdataset.clear();
+      rDataset.clear();
+      hrDataset.clear();
       
       cout << "Generating Samples";
       cout.flush();
@@ -599,25 +621,23 @@ int main(int argc, char** argv)
 	    vector<vector<int> > hObsContext;
 	    int hReward;
 	    bool hEnd;
-	    if(daggerType == 2)
-	    {
-	       hObsContext = obsContext;
-	    }
+	    hObsContext = obsContext;
 	    
 	    for(int h = 0; h < rolloutDepth; h++)
 	    {
-	       if(daggerType == 1)  //If not hallucinating, just use the regular context to create the data point
+	       dataset.push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
+	       if(b >= h*hDelay && h <= maxH)  //If hallucinating and if we've seen enough batches for this depth, and if we're not past the maximum depth, use the hallucinated context
 	       {
-		  dataset.push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
-		  rDataset.push_back(make_tuple(obsContext[0], nextAct, reward));
+		  hdataset.push_back(make_tuple(hObsContext, actContext, nextAct, nextObs, 0, false));
 	       }
-	       else if(b >= h*hDelay && h <= maxH)  //If hallucinating and if we've seen enough batches for this depth, and if we're not past the maximum depth, use the hallucinated context
+
+	       rDataset.push_back(make_tuple(obsContext[0], nextAct, reward, pow(discountFactor, h)));
+	       if(b >= h*hDelay)
 	       {
-		  dataset.push_back(make_tuple(hObsContext, actContext, nextAct, nextObs, 0, false));
-		  rDataset.push_back(make_tuple(hObsContext[0], nextAct, reward));
+		  hrDataset.push_back(make_tuple(hObsContext[0], nextAct, reward, pow(discountFactor, h)));	  
 	       }
 	       
-	       if(daggerType == 2 && b >= (h+1)*hDelay) //If hallucinating and if seen enough batches for this depth, roll the model forward (sample and update)
+	       if(b >= (h+1)*hDelay) //If hallucinating and if seen enough batches for this depth, roll the model forward (sample and update)
 	       {
 		  model->takeAction(nextAct, hObsContext[0], hReward, hEnd);
 	       }
@@ -633,18 +653,31 @@ int main(int argc, char** argv)
 	 else
 	 {
 	    dataset.push_back(make_tuple(obsContext, actContext, nextAct, nextObs, 0, false));
-	    rDataset.push_back(make_tuple(obsContext[0], nextAct, reward));
+	    rDataset.push_back(make_tuple(obsContext[0], nextAct, reward, 1));
 	 }
       }
 
       //Update the model
-      model->batchUpdate(dataset);
-      rewardModel->batchUpdate(rDataset);
+      if(daggerType < 2)
+      {
+	 model->batchUpdate(dataset);
+	 rewardModel->batchUpdate(rDataset);
+      }
+      else
+      {
+	 model->batchUpdate(hdataset);
+	 rewardModel->batchUpdate(hrDataset);
+      }
+
+      double ll = model->batchLL(dataset);
+      double hll = model->batchLL(hdataset);
+      double mse = rewardModel->batchMSE(rDataset);
+      double hmse = rewardModel->batchMSE(hrDataset);
 
       //Evaluate the policy for this batch
       policyCache.clear();
-      double averageDiscountedReward = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, policyCache);
-      cout << "Batch " << b << " Discounted Reward: " << averageDiscountedReward << endl;
-      fout << averageDiscountedReward << endl;
+      tuple<double, double, double> results = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, policyCache);
+      cout << "Batch " << b << " Discounted Reward: " << results.get<0>() << endl;
+      fout << results.get<0>() << " " << results.get<1>() << " " << results.get<2>() << " " << ll << " " << hll << " " << mse << " " << hmse << endl;
    }
 }

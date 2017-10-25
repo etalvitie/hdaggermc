@@ -248,6 +248,46 @@ void ConvolutionalBinaryCTS::batchUpdate(const vector<tuple<vector<vector<int> >
    }
 }
 
+double ConvolutionalBinaryCTS::batchLL(const vector<tuple<vector<vector<int> >, vector<int>, int, vector<int>, int, bool> >& dataset)
+{
+   int curLength = actHistory.back().size();
+   double ll = 0;
+   for(unsigned d = 0; d < dataset.size(); d++)
+   {
+      const vector<vector<int> >& obsContext = dataset[d].get<0>();
+      const vector<int>& actContext = dataset[d].get<1>();
+      int nextAct = dataset[d].get<2>();
+      const vector<int>& nextObs = dataset[d].get<3>();
+      int reward = dataset[d].get<4>();
+      bool end = dataset[d].get<5>();
+
+      //Assumes actContext and obsContext are same length...
+      for(unsigned i = 0; i < actContext.size(); i++)
+      {
+	 actHistory.back().push_back(actContext[i]);
+	 obsHistory.back().push_back(obsContext[i]);
+      }
+
+      //Dummy reward and end values...
+      for(unsigned i = 0; i < actContext.size(); i++)
+      {
+	 rHistory.back().push_back(0);
+	 endHistory.back().push_back(false);
+      }
+
+      double prob = predict(nextAct, nextObs);
+      ll += log(prob);
+      
+      //Undo!
+      actHistory.back().resize(curLength);
+      obsHistory.back().resize(curLength);
+      rHistory.back().resize(curLength);
+      endHistory.back().resize(curLength);
+   }
+
+   return ll/dataset.size();
+}
+
 void ConvolutionalBinaryCTS::reset()
 {
    actHistory.push_back(vector<int>());

@@ -14,7 +14,11 @@ class RewardModel
   public:
    virtual float getReward(int action, const vector<int>& obs) const = 0;
 
-   virtual void batchUpdate(const vector<tuple<vector<int>, int, float> >& dataset) = 0;
+   virtual double batchUpdate(const vector<tuple<vector<int>, int, float> >& dataset) = 0;
+   virtual double batchUpdate(const vector<tuple<vector<int>, int, float, float> >& dataset) = 0;
+
+   virtual double batchMSE(const vector<tuple<vector<int>, int, float, float> >& dataset) = 0;
+   virtual double batchMSE(const vector<tuple<vector<int>, int, float> >& dataset) = 0;
 };
 
 #endif

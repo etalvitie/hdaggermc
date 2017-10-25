@@ -25,3 +25,27 @@ float ShooterRewardModel::getReward(int action, const vector<int>& obs) const
    }
    return r;
 }
+
+double ShooterRewardModel::batchMSE(const vector<tuple<vector<int>, int, float, float> >& dataset)
+{
+   double sse = 0;
+   for(unsigned d = 0; d < dataset.size(); d++)
+   {
+      float r = getReward(dataset[d].get<1>(), dataset[d].get<0>());
+      float realR = dataset[d].get<2>();
+      sse += (r - realR)*(r - realR)*dataset[d].get<3>();
+   }
+   return sse/dataset.size();
+}
+
+double ShooterRewardModel::batchMSE(const vector<tuple<vector<int>, int, float> >& dataset)
+{
+   double sse = 0;
+   for(unsigned d = 0; d < dataset.size(); d++)
+   {
+      float r = getReward(dataset[d].get<1>(), dataset[d].get<0>());
+      float realR = dataset[d].get<2>();
+      sse += (r - realR)*(r - realR);
+   }
+   return sse/dataset.size();
+}
