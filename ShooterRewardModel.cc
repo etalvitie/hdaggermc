@@ -12,13 +12,15 @@ float ShooterRewardModel::getReward(int action, const vector<int>& obs) const
    {
       int bottomLeft = 4*15 + target*5 + 1;
       if(obs[bottomLeft] && !obs[bottomLeft + 1] && obs[bottomLeft + 2] && 
-	 !obs[bottomLeft - 15] && obs[bottomLeft - 14] && !obs[bottomLeft - 13])// &&
+	 !obs[bottomLeft - 15] && obs[bottomLeft - 14] && !obs[bottomLeft - 13] &&
+	 obs[bottomLeft-30] && !obs[bottomLeft-29] && obs[bottomLeft-28])
       {
 	 r += 10;
       }
 
       if(!obs[bottomLeft] && obs[bottomLeft + 1] && !obs[bottomLeft + 2] && 
-	 obs[bottomLeft - 15] && !obs[bottomLeft - 14] && obs[bottomLeft - 13])// &&
+	 obs[bottomLeft - 15] && !obs[bottomLeft - 14] && obs[bottomLeft - 13] &&
+	 !obs[bottomLeft-30] && obs[bottomLeft-29] && !obs[bottomLeft-28])
       {
 	 r += 20;
       }

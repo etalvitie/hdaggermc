@@ -18,34 +18,6 @@ Author: Erik Talvitie
 using namespace std;
 using namespace boost;
 
-/* Takes the most recent observation and action and
-   gives the resulting reward.*/
-int rewardFunction(const vector<int>& obs, int act)
-{
-   int r = 0;
-   if(act == 3)
-   {
-      r -= 1;
-   }
-
-   for(int target = 0; target < 3; target++)
-   {
-      int bottomLeft = 4*15 + target*5 + 1;
-      if(obs[bottomLeft] && !obs[bottomLeft + 1] && obs[bottomLeft + 2] && 
-	 !obs[bottomLeft - 15] && obs[bottomLeft - 14] && !obs[bottomLeft - 13])// &&
-      {
-	 r += 10;
-      }
-
-      if(!obs[bottomLeft] && obs[bottomLeft + 1] && !obs[bottomLeft + 2] && 
-	 obs[bottomLeft - 15] && !obs[bottomLeft - 14] && obs[bottomLeft - 13])// &&
-      {
-	 r += 20;
-      }
-   }
-   return r;
-}
-
 /* Takes a model, discount factor, current observation
    and uses one-ply Monte Carlo to choose an action.
    Optional parameters:
@@ -234,6 +206,7 @@ int main(int argc, char** argv)
       cout << "algorithm -- 0: DAgger, 1: DAgger-MC, 2: H-DAgger-MC, 3: One-ply MC with perfect model, 4: Uniform random, 5: Optimal policy" << endl;
       cout << "explorationType -- 0: Uniform random, 1: Optimal policy, 2: One-ply MC with perfect model" << endl;
       cout << "rewardType -- 0: Perfect reward, 1: Learned from real states, 2: learned from hallucinated states" << endl;
+      cout << "rewardStepSize -- the step size used in the reward model's gradient descent" << endl;
       cout << "rolloutsPerAction -- the number of rollouts to perform for each action during planning" << endl;
       cout << "rolloutDepth -- the depth of each rollout during planning" << endl;
       cout << "trial -- the trial number (determines the random seed)" << endl;
@@ -263,18 +236,19 @@ int main(int argc, char** argv)
    //1: Learned from real states
    //2: Learned from hallucinated states
    int rewardType = atoi(argv[3]);
-   int rolloutsPerA = atoi(argv[4]);
-   int rolloutDepth = atoi(argv[5]);
-   int trial = atoi(argv[6]);
-   int numBatches = atoi(argv[7]);
-   int samplesPerBatch = atoi(argv[8]);
+   double rewardStepSize = atof(argv[4]);
+   int rolloutsPerA = atoi(argv[5]);
+   int rolloutDepth = atoi(argv[6]);
+   int trial = atoi(argv[7]);
+   int numBatches = atoi(argv[8]);
+   int samplesPerBatch = atoi(argv[9]);
    int neighborhoodWidth = 7;
    int neighborhoodHeight = 7;
-   bool movingSweetSpot = atoi(argv[9]);
+   bool movingSweetSpot = atoi(argv[10]);
    int hDelay = 10;
-   int maxH = atoi(argv[10]);
+   int maxH = atoi(argv[11]);
 
-   int outputNoteIndex = 11;
+   int outputNoteIndex = 12;
    string outputNote;
    if(argc > outputNoteIndex)
    {
@@ -343,6 +317,11 @@ int main(int argc, char** argv)
 	 outSS << ".hallucinatedReward";
       }
 
+      if(rewardType > 0)
+      {
+	 outSS << ".stepSize" << rewardStepSize;
+      }
+
       outSS << ".nbhd" << neighborhoodWidth << "x" << neighborhoodHeight << ".spb" << samplesPerBatch << ".numBatches" << numBatches;
    }
 
@@ -363,7 +342,7 @@ int main(int argc, char** argv)
    RewardModel* rewardModel;
    if(rewardType > 0)
    {
-      rewardModel = new PatchRewardModel(numActions, numTargets*5, height, 3, 3, 0.5);
+      rewardModel = new PatchRewardModel(numActions, numTargets*5, height, 3, 3, rewardStepSize);
    }
    else
    {
@@ -487,6 +466,7 @@ int main(int argc, char** argv)
    rewardModel->batchUpdate(rDataset);
 
    double ll = model->batchLL(dataset);
+   double hll = ll;
    double mse = rewardModel->batchMSE(rDataset);
 
    //Evaluate the first policy
@@ -632,15 +612,12 @@ int main(int argc, char** argv)
 	       }
 
 	       rDataset.push_back(make_tuple(obsContext[0], nextAct, reward, pow(discountFactor, h)));
-	       if(b >= h*hDelay)
+	       if(b > h*hDelay || b > maxH*hDelay)
 	       {
 		  hrDataset.push_back(make_tuple(hObsContext[0], nextAct, reward, pow(discountFactor, h)));	  
 	       }
 	       
-	       if(b >= (h+1)*hDelay) //If hallucinating and if seen enough batches for this depth, roll the model forward (sample and update)
-	       {
-		  model->takeAction(nextAct, hObsContext[0], hReward, hEnd);
-	       }
+	       model->takeAction(nextAct, hObsContext[0], hReward, hEnd);
 	       
 	       obsContext[0] = nextObs;
 	       actContext[0] = nextAct;	       
@@ -657,6 +634,24 @@ int main(int argc, char** argv)
 	 }
       }
 
+      if(rewardType < 2)
+      {
+	 rewardModel->batchUpdate(rDataset);
+      }
+      else
+      {
+	 rewardModel->batchUpdate(hrDataset);
+      }
+
+      double mse = rewardModel->batchMSE(rDataset);
+      double hmse = rewardModel->batchMSE(hrDataset);
+
+      //Evaluate the policy for this batch
+      policyCache.clear();
+      tuple<double, double, double> results = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, policyCache);
+      cout << "Batch " << b << " Discounted Reward: " << results.get<0>() << endl;
+      fout << results.get<0>() << " " << results.get<1>() << " " << results.get<2>() << " " << ll << " " << hll << " " << mse << " " << hmse << endl;
+
       //Update the model
       if(daggerType < 2)
       {
@@ -667,24 +662,7 @@ int main(int argc, char** argv)
 	 model->batchUpdate(hdataset);
       }
 
-      if(rewardType < 2)
-      {
-	 rewardModel->batchUpdate(rDataset);
-      }
-      else
-      {
-	 rewardModel->batchUpdate(hrDataset);
-      }
-
-      double ll = model->batchLL(dataset);
-      double hll = model->batchLL(hdataset);
-      double mse = rewardModel->batchMSE(rDataset);
-      double hmse = rewardModel->batchMSE(hrDataset);
-
-      //Evaluate the policy for this batch
-      policyCache.clear();
-      tuple<double, double, double> results = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, policyCache);
-      cout << "Batch " << b << " Discounted Reward: " << results.get<0>() << endl;
-      fout << results.get<0>() << " " << results.get<1>() << " " << results.get<2>() << " " << ll << " " << hll << " " << mse << " " << hmse << endl;
+      ll = model->batchLL(dataset);
+      hll = model->batchLL(hdataset);
    }
 }
