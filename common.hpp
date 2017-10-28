@@ -32,7 +32,8 @@ typedef uint8_t bit_t;
 typedef float count_t;
 
 // holds context weights
-typedef double weight_t;
+//typedef double weight_t;
+typedef float weight_t; //ET: trying to save memory!
 
 // describe a binary context
 typedef std::vector<bit_t> context_t;

@@ -238,7 +238,7 @@ void ConvolutionalBinaryCTS::batchUpdate(const vector<tuple<vector<vector<int> >
 
       //Perform the updates
       updateActObs(actHistory.size() - 1, actHistory.back().size() - 1, 1);
-      updateREnd(actHistory.size() - 1, actHistory.back().size() - 1, 1);
+//      updateREnd(actHistory.size() - 1, actHistory.back().size() - 1, 1);
       
       //Undo!
       actHistory.back().resize(curLength);
