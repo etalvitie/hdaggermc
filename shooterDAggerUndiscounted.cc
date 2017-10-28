@@ -213,6 +213,8 @@ int main(int argc, char** argv)
       cout << "numBatches -- the number of batches to generate in DAgger-based algorithms" << endl;
       cout << "samplesPerBatch -- the number of samples to generate in each batch" << endl;
       cout << "movingBullseye -- 0: bullseyes stay still, 1: bullseyes move" << endl;
+      cout << "neighborhoodWidth -- the width of the convolutional neighborhood" << endl;
+      cout << "neighborhoodHeight -- the height of the convolutional neighborhood" << endl;
       cout << "maxHDepth -- maximum hallucinated rollout depth during training" << endl;
       cout << "outputFileNote -- adds the given string to the output filename" << endl;
       exit(1);
@@ -242,13 +244,13 @@ int main(int argc, char** argv)
    int trial = atoi(argv[7]);
    int numBatches = atoi(argv[8]);
    int samplesPerBatch = atoi(argv[9]);
-   int neighborhoodWidth = 7;
-   int neighborhoodHeight = 7;
-   bool movingSweetSpot = atoi(argv[10]);
+   int neighborhoodWidth = atoi(argv[10]);
+   int neighborhoodHeight = atoi(argv[11]);
+   bool movingSweetSpot = atoi(argv[12]);
    int hDelay = 10;
-   int maxH = atoi(argv[11]);
+   int maxH = atoi(argv[13]);
 
-   int outputNoteIndex = 12;
+   int outputNoteIndex = 14;
    string outputNote;
    if(argc > outputNoteIndex)
    {
