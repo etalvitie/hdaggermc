@@ -36,19 +36,22 @@ int onePlyMC(SamplingModel<int>* model, RewardModel* rewardModel, double discoun
 	 double discount = 1;
 	 if(printRollouts)
 	 {
-	    cout << "Rollout " << rollout << endl;
+	    cout << a << " Rollout " << rollout << endl;
 	 }
 	 double rolloutReturn = 0;
 	 vector<int> obs = curObs;
 	 for(int t = 0; t < rolloutDepth; t++)
 	 {
 	    float reward = rewardModel->getReward(action, obs);
+	    if(printRollouts)
+	    {
+	       cout << "A: " << action << " R: " << reward << endl;
+	    }
 	    bool endEpisode;
 	    int dummyReward;
 	    model->takeAction(action, obs, dummyReward, endEpisode);
 	    if(printRollouts)
 	    {
-	       cout << "A: " << action << endl;
 	       for(int y = 0; y < 15; y++)
 	       {
 		  for(int x = 0; x < 15; x++)
@@ -57,7 +60,6 @@ int onePlyMC(SamplingModel<int>* model, RewardModel* rewardModel, double discoun
 		  }
 		  cout << endl;
 	       }
-	       cout << "R: " << reward << endl;
 	    }
 	    returns[a] += discount*reward;
 	    rolloutReturn += discount*reward;
@@ -142,12 +144,28 @@ tuple<double, double, double> evaluate(ConvolutionalBinaryCTS* model, RewardMode
 
       for(int t = 0; t < 30; t++)
       {
-
+	 if(printRollouts)
+	 {
+	    cout << "Real step: " << t << endl;
+	    for(int r = 0; r < 15; r++)
+	    {
+	       for(int c = 0; c < 15; c++)
+	       {
+		  int symb = obs[r*15+c];
+		  if(symb == 0)
+		     cout << ".";
+		  else
+		     cout << "#";
+	       }
+	       cout << endl;
+	    }
+	    cout << endl;
+	 }
 	 size_t hash = hash_range(obs.begin(), obs.end());
 	 int action = policyCache[hash];
 	 if(!action)
 	 {
-	    action = onePlyMC(model, rewardModel, discountFactor, rolloutsPerA, rolloutDepth, obs, false, printRollouts);
+	    action = onePlyMC(model, rewardModel, discountFactor, rolloutsPerA, rolloutDepth, obs, printRollouts, printRollouts);
 	    policyCache[hash] = action + 1;
 	 }
 	 else
@@ -159,6 +177,11 @@ tuple<double, double, double> evaluate(ConvolutionalBinaryCTS* model, RewardMode
 	 float predictedR = rewardModel->getReward(action, obs);
 	 rewardSSE += (r - predictedR)*(r - predictedR);
 	 count++;
+
+	 if(printRollouts)
+	 {
+	    cout << "Real Action: " << action << " Real reward: " << r << endl;
+	 }
 
 	 world->takeAction(action, obs, reward, endEpisode);
 	 totalDiscountedReward += discount*r;
@@ -371,6 +394,22 @@ int main(int argc, char** argv)
 	 double discount = 1.0;
 	 for(int t = 0; t < 30; t++)
 	 {
+/*	    
+	    cout << "Real step: " << t << endl;
+	    for(int r = 0; r < 15; r++)
+	    {
+	       for(int c = 0; c < 15; c++)
+	       {
+		  int symb = obs[r*15+c];
+		  if(symb == 0)
+		     cout << ".";
+		  else
+		     cout << "#";
+	       }
+	       cout << endl;
+	    }
+	    cout << endl;
+*/	    
 	    int action;
 	    if(daggerType == 3) //One-ply MC with perfect model
 	    {
@@ -378,7 +417,7 @@ int main(int argc, char** argv)
 	       action = policyCache[hash];
 	       if(!action)
 	       {
-		  action = onePlyMC(world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, obs);
+		  action = onePlyMC(world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, obs);//, true, true);
 		  policyCache[hash] = action + 1;
 	       }
 	       else
@@ -399,6 +438,9 @@ int main(int argc, char** argv)
 	       }
 	    }
 	    int r = worldReward->getReward(action, obs);
+
+//	    cout << "Real Action: " << action << " Real reward: " << r << endl;
+
 	    int dummyR;
 	    bool endEpisode;
 	    world->takeAction(action, obs, dummyR, endEpisode);
@@ -648,12 +690,6 @@ int main(int argc, char** argv)
       double mse = rewardModel->batchMSE(rDataset);
       double hmse = rewardModel->batchMSE(hrDataset);
 
-      //Evaluate the policy for this batch
-      policyCache.clear();
-      tuple<double, double, double> results = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, policyCache);
-      cout << "Batch " << b << " Discounted Reward: " << results.get<0>() << endl;
-      fout << results.get<0>() << " " << results.get<1>() << " " << results.get<2>() << " " << ll << " " << hll << " " << mse << " " << hmse << endl;
-
       //Update the model
       if(daggerType < 2)
       {
@@ -666,5 +702,11 @@ int main(int argc, char** argv)
 
       ll = model->batchLL(dataset);
       hll = model->batchLL(hdataset);
+
+      //Evaluate the policy for this batch
+      policyCache.clear();
+      tuple<double, double, double> results = evaluate(model, rewardModel, world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, policyCache, b > 50);
+      cout << "Batch " << b << " Discounted Reward: " << results.get<0>() << endl;
+      fout << results.get<0>() << " " << results.get<1>() << " " << results.get<2>() << " " << ll << " " << hll << " " << mse << " " << hmse << endl;
    }
 }
