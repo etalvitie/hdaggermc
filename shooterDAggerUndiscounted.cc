@@ -394,22 +394,6 @@ int main(int argc, char** argv)
 	 double discount = 1.0;
 	 for(int t = 0; t < 30; t++)
 	 {
-/*	    
-	    cout << "Real step: " << t << endl;
-	    for(int r = 0; r < 15; r++)
-	    {
-	       for(int c = 0; c < 15; c++)
-	       {
-		  int symb = obs[r*15+c];
-		  if(symb == 0)
-		     cout << ".";
-		  else
-		     cout << "#";
-	       }
-	       cout << endl;
-	    }
-	    cout << endl;
-*/	    
 	    int action;
 	    if(daggerType == 3) //One-ply MC with perfect model
 	    {
@@ -417,7 +401,7 @@ int main(int argc, char** argv)
 	       action = policyCache[hash];
 	       if(!action)
 	       {
-		  action = onePlyMC(world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, obs);//, true, true);
+		  action = onePlyMC(world, worldReward, discountFactor, rolloutsPerA, rolloutDepth, obs);
 		  policyCache[hash] = action + 1;
 	       }
 	       else
@@ -438,8 +422,6 @@ int main(int argc, char** argv)
 	       }
 	    }
 	    int r = worldReward->getReward(action, obs);
-
-//	    cout << "Real Action: " << action << " Real reward: " << r << endl;
 
 	    int dummyR;
 	    bool endEpisode;

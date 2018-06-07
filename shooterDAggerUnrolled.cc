@@ -48,7 +48,7 @@ int onePlyMC(const vector<ConvolutionalBinaryCTS*>& model, RewardModel* rewardMo
 	 double discount = 1;
 	 if(printRollouts)
 	 {
-	    cout << "Rollout " << rollout << endl;
+	    cout << a << " Rollout " << rollout << endl;
 	 }
 	 double rolloutReturn = 0;
 	 int m = 0;
@@ -56,6 +56,10 @@ int onePlyMC(const vector<ConvolutionalBinaryCTS*>& model, RewardModel* rewardMo
 	 for(int t = 0; t < rolloutDepth; t++)
 	 {
 	    float reward = rewardModel->getReward(action, obs);
+	    if(printRollouts)
+	    {
+	       cout << "A: " << action << " R: " << reward << endl;
+	    }
 	    bool endEpisode;
 	    bool dummyReward;
 	    model[m]->sample(action, obs, dummyReward, endEpisode);
@@ -70,7 +74,6 @@ int onePlyMC(const vector<ConvolutionalBinaryCTS*>& model, RewardModel* rewardMo
 
 	    if(printRollouts)
 	    {
-	       cout << "A: " << action << endl;
 	       for(int y = 0; y < 15; y++)
 	       {
 		  for(int x = 0; x < 15; x++)
@@ -79,7 +82,6 @@ int onePlyMC(const vector<ConvolutionalBinaryCTS*>& model, RewardModel* rewardMo
 		  }
 		  cout << endl;
 	       }
-	       cout << "R: " << reward << endl;
 	    }
 	    returns[a] += discount*reward;
 	    rolloutReturn += discount*reward;
@@ -268,11 +270,28 @@ double evaluate(const vector<ConvolutionalBinaryCTS*>& model, RewardModel* rewar
 
       for(int t = 0; t < 30; t++)
       {
+	 if(printRollouts)
+	 {
+	    cout << "Real step: " << t << endl;
+	    for(int r = 0; r < 15; r++)
+	    {
+	       for(int c = 0; c < 15; c++)
+	       {
+		  int symb = obs[r*15+c];
+		  if(symb == 0)
+		     cout << ".";
+		  else
+		     cout << "#";
+	       }
+	       cout << endl;
+	    }
+	    cout << endl;
+	 }	 
 	 size_t hash = hash_range(obs.begin(), obs.end());
 	 int action = policyCache[hash];
 	 if(!action)
 	 {
-	    action = onePlyMC(model, rewardModel, discountFactor, numRollouts, rolloutDepth, obs, maxD, false, printRollouts);
+	    action = onePlyMC(model, rewardModel, discountFactor, numRollouts, rolloutDepth, obs, maxD, printRollouts, printRollouts);
 	    policyCache[hash] = action + 1;
 	 }
 	 else
@@ -281,6 +300,11 @@ double evaluate(const vector<ConvolutionalBinaryCTS*>& model, RewardModel* rewar
 	 }
 
 	 float r = worldReward->getReward(action, obs);
+
+	 if(printRollouts)
+	 {
+	    cout << "Real Action: " << action << " Real reward: " << r << endl;
+	 }
 	 
 	 world->takeAction(action, obs, reward, endEpisode);
 	 totalDiscountedReward += discount*r;
