@@ -107,8 +107,8 @@ int onePlyMC(SamplingModel<int>* model, RewardModel* rewardModel, double discoun
 /*Evaluates the policy associated with a given model by
   executing it in the world.
   Parameters:
-  model - a learned model to plan with
-  world - a perfect model to evaluate in
+  model/rewardModel - a learned model to plan with
+  world/worldReward - a perfect model to evaluate in
   discount factor
   policyCache - the theory is for a version of one-ply MC
   generates an action for each state, not a new action
@@ -200,7 +200,7 @@ int explorationPolicy(ShooterModel* world, ShooterRewardModel* worldReward, vect
 
 int main(int argc, char** argv)
 {
-   if(argc <= 9)
+   if(argc <= 13)
    {
       cout << "Usage: ./shooterDAggerUnrolled algorithm explorationType trial numBatches samplesPerBatch movingBullseye maxHDepth [outputFileNote]" << endl;
       cout << "algorithm -- 0: DAgger, 1: DAgger-MC, 2: H-DAgger-MC, 3: One-ply MC with perfect model, 4: Uniform random, 5: Optimal policy" << endl;
@@ -212,9 +212,9 @@ int main(int argc, char** argv)
       cout << "trial -- the trial number (determines the random seed)" << endl;
       cout << "numBatches -- the number of batches to generate in DAgger-based algorithms" << endl;
       cout << "samplesPerBatch -- the number of samples to generate in each batch" << endl;
-      cout << "movingBullseye -- 0: bullseyes stay still, 1: bullseyes move" << endl;
       cout << "neighborhoodWidth -- the width of the convolutional neighborhood" << endl;
       cout << "neighborhoodHeight -- the height of the convolutional neighborhood" << endl;
+      cout << "movingBullseye -- 0: bullseyes stay still, 1: bullseyes move" << endl;
       cout << "maxHDepth -- maximum hallucinated rollout depth during training" << endl;
       cout << "outputFileNote -- adds the given string to the output filename" << endl;
       exit(1);

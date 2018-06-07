@@ -1,3 +1,7 @@
+/********************
+Author: Erik Talvitie
+********************/
+
 #include "PatchRewardModel.h"
 
 PatchRewardModel::PatchRewardModel(int numActions, int width, int height, int patchWidth, int patchHeight, float stepSize) : numActions(numActions), width(width), height(height)
@@ -36,17 +40,6 @@ PatchRewardModel::PatchRewardModel(int numActions, int width, int height, int pa
 
 void PatchRewardModel::getActiveFeatures(int action, const vector<int>& obs, vector<int>& indices) const
 {
-   /*
-   cout << endl;
-   for(int r = 0; r < height; r++)
-   {
-      for(int c = 0; c < width; c++)
-      {
-	 cout << (obs[r*width + c] ? "#" : ".");
-      }
-      cout << endl;
-   }
-   */
    indices.clear();
 
    indices.push_back(0);
@@ -55,6 +48,9 @@ void PatchRewardModel::getActiveFeatures(int action, const vector<int>& obs, vec
    {
       const vector<int>& nbhd = neighborhoods[p];
 
+      //There are three possible values for each pixel in the patch
+      //0/1 if the pixel is inside the image
+      //2 if the pixel is outside the image
       int index = 0;
       for(unsigned n = 0; n < nbhd.size(); n++)
       {
@@ -69,17 +65,10 @@ void PatchRewardModel::getActiveFeatures(int action, const vector<int>& obs, vec
 	 }
       }
 
-//      cout << index << "(";
-
       index += p*numPatches + 1;
-
-//      cout << index << ") ";
-//      if(p%15 == 14)
-//	 cout << endl;
 
       indices.push_back(index);
    }
-
 }
 
 float PatchRewardModel::getReward(int action, const vector<int>& obs) const
@@ -109,14 +98,9 @@ double PatchRewardModel::batchUpdate(const vector<tuple<vector<int>, int, float>
    float sse = 0;
    int count = 0;
 
-//   vector<unordered_map<int, float> > updates(numActions);
-//   vector<int> numDataPoints(numActions, 0);
-//   numExamples++;   
    for(unsigned d = 0; d < dataset.size(); d++)
    {
       count++;
-//      numExamples++;
-
       const vector<int>& obs = dataset[d].get<0>();
       int act = dataset[d].get<1>();
       float r = dataset[d].get<2>();
@@ -127,44 +111,13 @@ double PatchRewardModel::batchUpdate(const vector<tuple<vector<int>, int, float>
 
       float error = r - myR;
       sse += error*error;
-/*
-      if(error != 0)
-      {
-	 cout << endl;
-	 for(int r = 0; r < height; r++)
-	 {
-	    for(int c = 0; c < width; c++)
-	    {
-	       cout << (obs[r*width + c] ? "#" : ".");
-	    }
-	    cout << endl;
-	 }
-	 cout << "Action: " << act << " R: " << r << " MyR: " << myR << endl;
-      }
-*/
-//      numDataPoints[act]++;
-//	 cout << error << " " << 1/(sqrt(numExamples)*(height*width+1)) << endl;
+
       for(unsigned i = 0; i < activeFeatures.size(); i++)
       {
-//	 updates[act][activeFeatures[i]] += error;
 	 weights[act][activeFeatures[i]] += stepSize*error;
-//	 cout << numExamples << " " << sqrt(numExamples) << endl;
-//	 weights[act][activeFeatures[i]] += error/(sqrt(numExamples)*(height*width+1));
-//	 cout << weights[act][activeFeatures[i]] << endl;
       }
    }
 
-//   stepSize = 1.0/(sqrt(numExamples)*(height*width + 1));
-//   stepSize = 1.0/(sqrt(numExamples));
-/*
-   for(int a = 0; a < numActions; a++)
-   {
-      for(unordered_map<int, float>::iterator iter = updates[a].begin(); iter != updates[a].end(); iter++)
-      {
-	 weights[a][iter->first] += stepSize * iter->second/numDataPoints[a];
-      }
-   }
-*/
    return sse/count;
 }
 
@@ -173,14 +126,9 @@ double PatchRewardModel::batchUpdate(const vector<tuple<vector<int>, int, float,
    float sse = 0;
    int count = 0;
 
-//   vector<unordered_map<int, float> > updates(numActions);
-//   vector<int> numDataPoints(numActions, 0);
-//   numExamples++;   
    for(unsigned d = 0; d < dataset.size(); d++)
    {
       count++;
-//      numExamples++;
-
       const vector<int>& obs = dataset[d].get<0>();
       int act = dataset[d].get<1>();
       float r = dataset[d].get<2>();
@@ -191,44 +139,13 @@ double PatchRewardModel::batchUpdate(const vector<tuple<vector<int>, int, float,
 
       float error = r - myR;
       sse += error*error*dataset[d].get<3>();
-/*
-      if(error != 0)
-      {
-	 cout << endl;
-	 for(int r = 0; r < height; r++)
-	 {
-	    for(int c = 0; c < width; c++)
-	    {
-	       cout << (obs[r*width + c] ? "#" : ".");
-	    }
-	    cout << endl;
-	 }
-	 cout << "Action: " << act << " R: " << r << " MyR: " << myR << endl;
-      }
-*/
-//      numDataPoints[act]++;
-//	 cout << error << " " << 1/(sqrt(numExamples)*(height*width+1)) << endl;
+
       for(unsigned i = 0; i < activeFeatures.size(); i++)
       {
-//	 updates[act][activeFeatures[i]] += error;
 	 weights[act][activeFeatures[i]] += stepSize*error*dataset[d].get<3>();
-//	 cout << numExamples << " " << sqrt(numExamples) << endl;
-//	 weights[act][activeFeatures[i]] += error/(sqrt(numExamples)*(height*width+1));
-//	 cout << weights[act][activeFeatures[i]] << endl;
       }
    }
 
-//   stepSize = 1.0/(sqrt(numExamples)*(height*width + 1));
-//   stepSize = 1.0/(sqrt(numExamples));
-/*
-   for(int a = 0; a < numActions; a++)
-   {
-      for(unordered_map<int, float>::iterator iter = updates[a].begin(); iter != updates[a].end(); iter++)
-      {
-	 weights[a][iter->first] += stepSize * iter->second/numDataPoints[a];
-      }
-   }
-*/
    return sse/count;
 }
 

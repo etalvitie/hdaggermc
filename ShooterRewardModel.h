@@ -1,3 +1,7 @@
+/********************
+Author: Erik Talvitie
+********************/
+
 #ifndef SHOOTER_REWARD_MODEL_H
 #define SHOOTER_REWARD_MODEL_H
 
@@ -11,6 +15,7 @@
 using namespace std;
 using namespace boost;
 
+/* A perfect reward model for the Shooter problem */
 class ShooterRewardModel : public RewardModel
 {
   public:

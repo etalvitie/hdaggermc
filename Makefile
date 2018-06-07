@@ -1,19 +1,13 @@
 OPTS = -Wall -g -O3 -Wno-deprecated
 LIB = -lboost_system
 
-all: shooterDAggerUnrolled shooterDAggerUndiscounted shooterDAggerMCTSUnrolled shooterDAggerMCTSUndiscounted
-
-shooterDAggerMCTSUndiscounted: shooterDAggerMCTSUndiscounted.cc ShooterModel.o SamplingModel.h ConvolutionalBinaryCTS.o PatchRewardModel.o RewardModel.h ShooterRewardModel.o cts.o PowFast.o icsilog.o icsilogw.hpp jacoblog.hpp
-	g++ ${OPTS} -o shooterDAggerMCTSUndiscounted shooterDAggerMCTSUndiscounted.cc ShooterModel.o ConvolutionalBinaryCTS.o cts.o PatchRewardModel.o ShooterRewardModel.o PowFast.o icsilog.o ${LIB}
-
-shooterDAggerMCTSUnrolled: shooterDAggerMCTSUnrolled.cc ShooterModel.o SamplingModel.h ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o icsilogw.hpp jacoblog.hpp
-	g++ ${OPTS} -o shooterDAggerMCTSUnrolled shooterDAggerMCTSUnrolled.cc ShooterModel.o ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o ${LIB}
+all: shooterDAggerUnrolled shooterDAggerUndiscounted
 
 shooterDAggerUndiscounted: shooterDAggerUndiscounted.cc ShooterModel.o SamplingModel.h ConvolutionalBinaryCTS.o RewardModel.h ShooterRewardModel.o PatchRewardModel.o cts.o PowFast.o icsilog.o icsilogw.hpp jacoblog.hpp
 	g++ ${OPTS} -o shooterDAggerUndiscounted shooterDAggerUndiscounted.cc ShooterModel.o ConvolutionalBinaryCTS.o ShooterRewardModel.o PatchRewardModel.o cts.o PowFast.o icsilog.o ${LIB}
 
-shooterDAggerUnrolled: shooterDAggerUnrolled.cc ShooterModel.o SamplingModel.h ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o icsilogw.hpp jacoblog.hpp
-	g++ ${OPTS} -o shooterDAggerUnrolled shooterDAggerUnrolled.cc ShooterModel.o ConvolutionalBinaryCTS.o cts.o PowFast.o icsilog.o ${LIB}
+shooterDAggerUnrolled: shooterDAggerUnrolled.cc ShooterModel.o SamplingModel.h ConvolutionalBinaryCTS.o RewardModel.h ShooterRewardModel.o PatchRewardModel.o cts.o PowFast.o icsilog.o icsilogw.hpp jacoblog.hpp
+	g++ ${OPTS} -o shooterDAggerUnrolled shooterDAggerUnrolled.cc ShooterModel.o ConvolutionalBinaryCTS.o ShooterRewardModel.o PatchRewardModel.o cts.o PowFast.o icsilog.o ${LIB}
 
 ShooterRewardModel.o: ShooterRewardModel.cc ShooterRewardModel.h
 	g++ ${OPTS} -c ShooterRewardModel.cc

@@ -1,6 +1,5 @@
 /********************
 Author: Erik Talvitie
-Date: 2016
 ********************/
 
 #ifndef CONVOLUTIONAL_BINARY_CTS

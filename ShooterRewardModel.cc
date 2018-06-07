@@ -1,3 +1,7 @@
+/********************
+Author: Erik Talvitie
+********************/
+
 #include "ShooterRewardModel.h"
 
 float ShooterRewardModel::getReward(int action, const vector<int>& obs) const

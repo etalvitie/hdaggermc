@@ -1,6 +1,5 @@
 /********************
 Author: Erik Talvitie
-Date: 2016
 ********************/
 
 #include "ShooterModel.h"
@@ -64,18 +63,7 @@ void ShooterModel::takeAction(int act, vector<int>& obs, int& reward, bool& endE
    {
       sweetSpot = 1;
    }
-   /*
-   //Trying out more complicated movement
-   if(movingSweetSpot)
-   {
-      targetPhase = (targetPhase + 1)%8;
-   }
-   int sweetSpot = targetPhase/2;
-   if(targetPhase > 5)
-   {
-      sweetSpot = 1;
-   }
-   */
+
    //Update the bullets...
    vector<int> toErase;
    for(unsigned i = 0; i < bullets.size(); i++)
