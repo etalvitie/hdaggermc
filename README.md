@@ -1,7 +1,7 @@
 # hdaggermc
-Source code related to the AAAI 2017 paper "Self-Correcting Models for Model-Based Reinforcement Learning" and the ICML 2018 paper "Learning the Reward Function for a Misspecified Model" by Erik Talvitie. Please see the papers for descriptions of the algorithms and experiments.
+Source code related to the AAAI 2017 paper "Self-Correcting Models for Model-Based Reinforcement Learning" and the ICML 2018 paper "Learning the Reward Function for a Misspecified Model" by E. Talvitie. Please see the papers for descriptions of the algorithms and experiments.
 
-Author: Erik Talvitie (except where noted below)
+Author: Erin Talvitie (except where noted below)
 
 Disclaimer/Apology: This is classic "research code." It was developed in a disorganized and ad-hoc manner as the needs of the project dictated, not via a disciplined design process. It was not developed to be general purpose, but rather to support specific experiments. As such, though I have tried to clean it up a little bit, it is very likely that it contains poor/puzzling design choices, vestigial appendages, and other oddities and/or flaws. It is also poorly documented. Please forgive my mess. The main purpose of this release is to permit reproduction of the empirical results and to archive the source code. If you would like to adapt some of this code for your own purposes, feel free to contact me with questions and I will do my best to help!
 
